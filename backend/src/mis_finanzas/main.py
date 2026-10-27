@@ -15,6 +15,7 @@ from mis_finanzas.core.config import Settings, get_settings
 from mis_finanzas.core.db import make_engine, make_session_factory
 from mis_finanzas.core.logging import configure_logging
 from mis_finanzas.core.migrate import upgrade_to_head
+from mis_finanzas.importers.catalog import register_builtin_importers
 from mis_finanzas.market.http import PublicHttpClient
 from mis_finanzas.market.models import RateType
 from mis_finanzas.market.refresh import refresh_rates
@@ -60,6 +61,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     upgrade_to_head(settings.database_url)
+    register_builtin_importers()
     app = FastAPI(title="mis-finanzas", lifespan=lifespan)
     app.state.settings = settings
     app.state.session_factory = make_session_factory(make_engine(settings.database_url))

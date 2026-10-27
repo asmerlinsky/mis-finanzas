@@ -124,18 +124,25 @@ def test_main_defaults_to_samples_and_rejects_other_types(
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("A agust&#237;n sanc / varios", "A XXXX XXXX / varios"),
-        ("De Juana Pere merlins", "De XXXX XXXX merlins"),
+        ("A mart&#237;n gome / varios", "A XXXX XXXX / varios"),
+        ("De Juana Pere gomezs", "De XXXX XXXX gomezs"),
         ("Per", "Per"),  # 3 letters: too short to count as a truncation
     ],
 )
 def test_truncated_names_and_entities_are_masked(text: str, expected: str) -> None:
-    redactor = Redactor(["Agustín Sánchez", "Juana Pérez"], random.Random(0))
+    redactor = Redactor(["Martín Gómez", "Juana Pérez"], random.Random(0))
     assert redactor.text(text) == expected
 
 
 def test_leak_check_catches_truncations_and_entities() -> None:
     from mis_finanzas.tools.redaction import text_leaks
 
-    leaks = text_leaks([], ["Transf a juana pere", "agust&#237;n"], ["Juana Pérez", "Agustín"])
-    assert "JUANA" in leaks and "PERE" in leaks and "AGUSTIN" in leaks
+    leaks = text_leaks([], ["Transf a juana pere", "mart&#237;n"], ["Juana Pérez", "Martín"])
+    assert "JUANA" in leaks and "PERE" in leaks and "MARTIN" in leaks
+
+
+def test_garbled_name_one_letter_off_is_masked() -> None:
+    redactor = Redactor(["Martín Gómez"], random.Random(0))
+    assert redactor.text("A martã\x8dn gome / varios") == "A XXXX XXXX / varios"
+    assert redactor.text("A martÃ\xadn") == "A XXXX"
+    assert redactor.text("Agosto") == "Agosto"

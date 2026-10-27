@@ -105,23 +105,52 @@ export interface PreviewRow {
   date: string
   amount: string
   description: string
+  target: string
+  account_id: number | null
+  reference: string | null
+  installment: string | null // "5/8"
   duplicate: boolean
+  near_duplicate: boolean
   category_name: string | null
   kind: TransactionKind
 }
 
+export interface StatementCheck {
+  name: string
+  expected: string
+  actual: string
+  ok: boolean
+}
+
+export interface PreviewTarget {
+  target: string
+  account_id: number | null
+  rows: number
+}
+
 export interface Preview {
+  importer: string
   filename: string
   already_imported: boolean
   new_count: number
   duplicate_count: number
+  near_duplicate_count: number
+  targets: PreviewTarget[]
+  unmapped_targets: string[]
+  checks: StatementCheck[]
+  metadata: Record<string, string>
   rows: PreviewRow[]
   errors: { line_number: number; message: string }[]
 }
 
+export interface SourceAccount {
+  key: string
+  account_id: number
+}
+
 export interface ImportBatch {
   id: number
-  account_id: number
+  account_id: number | null
   importer: string
   filename: string
   rows_imported: number

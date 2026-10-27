@@ -102,7 +102,12 @@ class PreviewRowOut(BaseModel):
     date: date
     amount: Decimal
     description: str
+    target: str
+    account_id: int | None
+    reference: str | None
+    installment: str | None  # "5/8"
     duplicate: bool
+    near_duplicate: bool
     category_name: str | None
     kind: TransactionKind
 
@@ -112,18 +117,46 @@ class RowErrorOut(BaseModel):
     message: str
 
 
+class CheckOut(BaseModel):
+    name: str
+    expected: Decimal
+    actual: Decimal
+    ok: bool
+
+
+class TargetOut(BaseModel):
+    target: str
+    account_id: int | None
+    rows: int
+
+
 class PreviewOut(BaseModel):
+    importer: str
     filename: str
     already_imported: bool
     new_count: int
     duplicate_count: int
+    near_duplicate_count: int
+    targets: list[TargetOut]
+    unmapped_targets: list[str]
+    checks: list[CheckOut]
+    metadata: dict[str, str]
     rows: list[PreviewRowOut]
     errors: list[RowErrorOut]
 
 
+class SourceAccountIn(BaseModel):
+    account_id: int
+
+
+class SourceAccountOut(OrmModel):
+    key: str
+    account_id: int
+
+
 class ImportBatchOut(OrmModel):
     id: int
-    account_id: int
+    account_id: int | None
     importer: str
     filename: str
     rows_imported: int
