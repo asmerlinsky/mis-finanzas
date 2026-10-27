@@ -1,0 +1,43 @@
+{
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
+  },
+  "permissions": {
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "LS",
+      "Bash(just test*)",
+      "Bash(just lint*)",
+      "Bash(just check*)",
+      "Bash(just format*)",
+      "Bash(just setup*)",
+      "Bash(just hooks*)",
+      "Bash(uv run*)",
+      "Bash(uv sync*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch*)",
+      "Bash(git add*)",
+      "Bash(git checkout*)"
+    ],
+    "deny": [
+      "Bash(rm -rf*)",
+      "Bash(git commit*)",
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(git push origin main)",
+      "Bash(git push origin main:*)",
+      "Bash(git push * main)",
+      "Bash(git push * HEAD:main)",
+      "Bash(git push * --delete main)"
+    ],
+    "ask": [
+      "Bash(git push)"
+    ]
+  }
+}

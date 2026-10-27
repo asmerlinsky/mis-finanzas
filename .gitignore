@@ -1,0 +1,34 @@
+# Personal data never enters the repo
+data/
+samples/
+# Statements downloaded into the repo root
+/*.pdf
+/*.csv
+/*.xlsx
+/*.xls
+uploads/
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Frontend
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Editors
+.vscode/
+.idea/
