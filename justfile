@@ -52,6 +52,10 @@ test-file path:
 redact file *args:
     uv run --project {{backend}} python -m mis_finanzas.tools.redact "$@"
 
+# Run every importer over samples/; reports importer, row counts and checks, never content
+sample-check:
+    uv run --project {{backend}} python -m mis_finanzas.tools.sample_check samples
+
 # Draw a JSON sample back as a PDF to review it: just preview samples/x.redacted.json
 preview sample:
     uv run --project {{backend}} python -m mis_finanzas.tools.render_sample "{{sample}}"

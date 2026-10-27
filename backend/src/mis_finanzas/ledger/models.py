@@ -77,7 +77,8 @@ class ImportBatch(Base):
     __tablename__ = "import_batches"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
+    # Set when every row went to one account; a statement can feed several (e.g. ARS + USD).
+    account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"), default=None)
     importer: Mapped[str] = mapped_column(String(100))
     importer_version: Mapped[str] = mapped_column(String(20))
     filename: Mapped[str] = mapped_column(String(255))
@@ -109,6 +110,10 @@ class Transaction(Base):
         ForeignKey("transactions.id", ondelete="SET NULL"), default=None
     )
     fingerprint: Mapped[str] = mapped_column(String(64), unique=True)
+    # The statement's own id for the movement (comprobante, referencia), when it has one.
+    reference: Mapped[str | None] = mapped_column(String(100), default=None)
+    installment_number: Mapped[int | None] = mapped_column(Integer, default=None)
+    installment_total: Mapped[int | None] = mapped_column(Integer, default=None)
 
     account: Mapped[Account] = relationship(lazy="joined")
     category: Mapped[Category | None] = relationship(lazy="joined")

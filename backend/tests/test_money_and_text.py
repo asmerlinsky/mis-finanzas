@@ -55,23 +55,31 @@ def test_normalize_description() -> None:
 
 
 def test_occurrence_indexes_count_identical_rows() -> None:
-    a = (date(2026, 1, 1), -100, "CAFE")
-    b = (date(2026, 1, 1), -200, "CAFE")
+    a = (date(2026, 1, 1), -100)
+    b = (date(2026, 1, 1), -200)
     assert occurrence_indexes([a, b, a, a]) == [0, 0, 1, 2]
 
 
-def test_fingerprint_depends_on_every_field() -> None:
-    base = fingerprint(1, date(2026, 1, 1), -100, "CAFE", 0)
-    assert base == fingerprint(1, date(2026, 1, 1), -100, "CAFE", 0)
+def test_fingerprint_depends_on_account_date_amount_and_occurrence() -> None:
+    base = fingerprint(1, date(2026, 1, 1), -100, 0)
+    assert base == fingerprint(1, date(2026, 1, 1), -100, 0)
     variants = [
-        fingerprint(2, date(2026, 1, 1), -100, "CAFE", 0),
-        fingerprint(1, date(2026, 1, 2), -100, "CAFE", 0),
-        fingerprint(1, date(2026, 1, 1), -101, "CAFE", 0),
-        fingerprint(1, date(2026, 1, 1), -100, "TE", 0),
-        fingerprint(1, date(2026, 1, 1), -100, "CAFE", 1),
+        fingerprint(2, date(2026, 1, 1), -100, 0),
+        fingerprint(1, date(2026, 1, 2), -100, 0),
+        fingerprint(1, date(2026, 1, 1), -101, 0),
+        fingerprint(1, date(2026, 1, 1), -100, 1),
     ]
     assert base not in variants
 
 
 def test_normalize_description_decodes_html_entities() -> None:
-    assert normalize_description("A agust&#237;n &amp; co") == "A AGUSTIN & CO"
+    assert normalize_description("A mart&#237;n &amp; co") == "A MARTIN & CO"
+
+
+def test_normalize_description_repairs_double_encoded_accents() -> None:
+    assert normalize_description("Transf a martÃ\xadn") == "TRANSF A MARTIN"
+    assert normalize_description("Peluquería") == "PELUQUERIA"  # already fine: untouched
+
+
+def test_normalize_description_drops_invisible_characters() -> None:
+    assert normalize_description("mart\x8dn pa\xadgo") == "MARTN PAGO"

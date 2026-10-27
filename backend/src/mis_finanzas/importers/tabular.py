@@ -78,7 +78,7 @@ def _excel_cell(value: object) -> Cell:
     return str(value)
 
 
-def _excel_lines(content: bytes) -> list[list[Cell]]:
+def excel_lines(content: bytes) -> list[list[Cell]]:
     try:
         workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     except Exception as exc:
@@ -93,7 +93,7 @@ def read_table(content: bytes, filename: str, mapping: TabularMapping) -> list[T
     """Rows below the header as `(line_number, {column: cell})`."""
     suffix = PurePath(filename).suffix.lower()
     if suffix in EXCEL_SUFFIXES:
-        lines = _excel_lines(content)
+        lines = excel_lines(content)
     elif suffix in CSV_SUFFIXES:
         lines = [list[Cell](row) for row in _csv_lines(content, mapping.delimiter)]
     else:

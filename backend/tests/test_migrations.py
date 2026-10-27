@@ -1,10 +1,13 @@
 """The migrations must produce exactly the schema the models describe."""
 
+from datetime import date
 from pathlib import Path
 
 from alembic import command
+from sqlalchemy import create_engine, text
 
 from mis_finanzas.core.migrate import alembic_config, upgrade_to_head
+from mis_finanzas.ledger.dedup import fingerprint
 
 
 def test_migrations_match_models(tmp_path: Path) -> None:
@@ -12,3 +15,37 @@ def test_migrations_match_models(tmp_path: Path) -> None:
     upgrade_to_head(url)
     # Raises if autogenerate would emit any operation.
     command.check(alembic_config(url))
+
+
+def test_0002_recomputes_fingerprints_without_losing_rows(tmp_path: Path) -> None:
+    url = f"sqlite:///{tmp_path / 'm.db'}"
+    command.upgrade(alembic_config(url), "0001")
+    engine = create_engine(url)
+    with engine.begin() as db:
+        db.execute(text("INSERT INTO accounts VALUES (1, 'Banco', 'X', 'bank', 'ARS')"))
+        for batch_id in (1, 2):
+            db.execute(
+                text(
+                    "INSERT INTO import_batches (id, account_id, importer, importer_version, "
+                    "filename, file_sha256, stored_path, rows_imported, rows_duplicate, "
+                    f"rows_skipped) VALUES ({batch_id}, 1, 'generic_tabular', '1', 'f', "
+                    f"'sha{batch_id}', 'p', 1, 0, 0)"
+                )
+            )
+        # The same movement imported twice under the old, description-based rule.
+        for tx_id, batch_id, description in ((1, 1, "COMPRA DIA"), (2, 2, "DIA COMPRA SUPER")):
+            db.execute(
+                text(
+                    "INSERT INTO transactions (id, account_id, date, amount_cents, "
+                    "description_raw, description_norm, kind, import_batch_id, fingerprint) VALUES "
+                    f"({tx_id}, 1, '2026-01-05', -100000, '{description}', '{description}', "
+                    f"'expense', {batch_id}, 'old{tx_id}')"
+                )
+            )
+    upgrade_to_head(url)
+    with engine.connect() as db:
+        prints = db.execute(text("SELECT fingerprint FROM transactions ORDER BY id")).scalars()
+        assert list(prints) == [
+            fingerprint(1, date(2026, 1, 5), -100000, 0),
+            fingerprint(1, date(2026, 1, 5), -100000, 1),  # kept, as the next occurrence
+        ]

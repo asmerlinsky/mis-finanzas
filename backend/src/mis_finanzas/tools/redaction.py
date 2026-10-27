@@ -12,7 +12,7 @@ import re
 from collections.abc import Iterable
 from pathlib import Path
 
-from mis_finanzas.ledger.text import normalize_description
+from mis_finanzas.ledger.text import normalize_description, repair_mojibake, strip_invisible
 
 # Dates stay readable: `5/3/2025`, `05-03-25`, `2026-10-27`, `2026-10-27T12:30:00.000-03:00`.
 DATE_TEXT = re.compile(
@@ -23,10 +23,12 @@ IDENTIFIER = re.compile(r"\d{6,}")
 MASK = "XXXX"
 _NOT_WORD = re.compile(r"\W")
 _WORD = re.compile(r"\w+")
-# Name parts this long are masked on their own: "MERLINSKY" alone still identifies.
+# Name parts this long are masked on their own: a surname alone still identifies.
 MIN_NAME_PART = 3
-# Banks truncate names ("merlins", "sanc"): a word this long that starts a name part is masked.
+# Banks truncate names ("gomezs", "gome"): a word this long that starts a name part is masked.
 MIN_NAME_PREFIX = 4
+# Garbled encodings (`martã\x8dn` -> MARTAN): a word this long, one letter off a name part.
+MIN_FUZZY_NAME = 5
 # A random digit can recreate an original value by chance; such attempts are retried.
 MAX_ATTEMPTS = 5
 
@@ -44,7 +46,7 @@ class Redactor:
 
     def text(self, value: str) -> str:
         """Entities decoded, full names, then name parts and truncated parts, then digits."""
-        value = html.unescape(value)
+        value = strip_invisible(repair_mojibake(html.unescape(value)))
         for name in self._names:
             value = name.sub(MASK, value)
         value = _WORD.sub(self._mask_part, value)
@@ -63,14 +65,20 @@ class Redactor:
 
 
 def is_name_part(token: str, parts: set[str]) -> bool:
-    """A whole name part, or a truncation of one: `MERLINS` for `MERLINSKY`."""
+    """A whole name part, a truncation (`GOME`), or one letter off (`MARTAN`)."""
     if token in parts:
         return True
-    return len(token) >= MIN_NAME_PREFIX and any(part.startswith(token) for part in parts)
+    if len(token) >= MIN_NAME_PREFIX and any(part.startswith(token) for part in parts):
+        return True
+    return len(token) >= MIN_FUZZY_NAME and any(_one_letter_off(token, part) for part in parts)
+
+
+def _one_letter_off(token: str, part: str) -> bool:
+    return len(token) == len(part) and sum(a != b for a, b in zip(token, part, strict=True)) == 1
 
 
 def name_parts(names: Iterable[str]) -> set[str]:
-    """`["Agustín Sánchez de X"]` -> `{"AGUSTIN", "SANCHEZ"}`: parts of 3+ characters."""
+    """`["Martín Gómez de X"]` -> `{"MARTIN", "GOMEZ"}`: parts of 3+ characters."""
     return {
         part
         for name in names
@@ -93,7 +101,7 @@ def text_leaks(original: Iterable[str], redacted: Iterable[str], names: Iterable
     characters (`PERE`). HTML entities are decoded before comparing.
     """
     names = list(names)
-    joined = html.unescape("\n".join(redacted))
+    joined = strip_invisible(repair_mojibake(html.unescape("\n".join(redacted))))
     leaks = sorted(i for i in identifiers(original) if i in joined)
     compact = compact_text(joined)
     leaks += [n for n in names if compact_text(n) and compact_text(n) in compact]

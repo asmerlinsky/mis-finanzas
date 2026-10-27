@@ -7,18 +7,23 @@ from sqlalchemy.orm import Session
 from mis_finanzas.api.common import commit_or_409, get_or_404
 from mis_finanzas.api.deps import SessionDep, SettingsDep
 from mis_finanzas.api.schemas import (
+    CheckOut,
     ImportBatchOut,
     MappingIn,
     MappingOut,
     PreviewOut,
     PreviewRowOut,
     RowErrorOut,
+    SourceAccountIn,
+    SourceAccountOut,
+    TargetOut,
 )
 from mis_finanzas.importers.base import ImportFileError
-from mis_finanzas.importers.models import ImportMapping
+from mis_finanzas.importers.models import ImportMapping, SourceAccount
 from mis_finanzas.importers.service import (
     ImportPreview,
     ImportRejectedError,
+    PreviewRow,
     build_preview,
     commit_import,
 )
@@ -29,7 +34,8 @@ router = APIRouter(tags=["imports"])
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 
 Upload = Annotated[UploadFile, File()]
-MappingId = Annotated[int, Form()]
+# Without a mapping, the importer that recognizes the file reads it.
+MappingId = Annotated[int | None, Form()]
 
 
 @router.get("/mappings", response_model=list[MappingOut])
@@ -74,37 +80,71 @@ async def _read_upload(upload: UploadFile) -> tuple[bytes, str]:
     return content, upload.filename or "upload"
 
 
+def _row_out(row: PreviewRow) -> PreviewRowOut:
+    return PreviewRowOut(
+        line_number=row.line_number,
+        date=row.date,
+        amount=row.amount,
+        description=row.description,
+        target=row.target,
+        account_id=row.account_id,
+        reference=row.reference,
+        installment=f"{row.installment[0]}/{row.installment[1]}" if row.installment else None,
+        duplicate=row.duplicate,
+        near_duplicate=row.near_duplicate,
+        category_name=row.category.name if row.category else None,
+        kind=row.kind,
+    )
+
+
 def _preview_out(preview: ImportPreview) -> PreviewOut:
-    rows = [
-        PreviewRowOut(
-            line_number=r.line_number,
-            date=r.date,
-            amount=r.amount,
-            description=r.description,
-            duplicate=r.duplicate,
-            category_name=r.category.name if r.category else None,
-            kind=r.kind,
-        )
-        for r in preview.rows
-    ]
-    errors = [RowErrorOut(line_number=e.line_number, message=e.message) for e in preview.errors]
+    rows = [_row_out(r) for r in preview.rows]
+    counts = {t: sum(r.target == t for r in preview.rows) for t in preview.target_accounts}
     new_count = len(preview.new_rows)
     return PreviewOut(
+        importer=preview.importer,
         filename=preview.filename,
         already_imported=preview.already_imported,
         new_count=new_count,
         duplicate_count=len(rows) - new_count,
+        near_duplicate_count=sum(r.near_duplicate for r in preview.rows),
+        targets=[
+            TargetOut(target=t, account_id=a, rows=counts[t])
+            for t, a in preview.target_accounts.items()
+        ],
+        unmapped_targets=preview.unmapped_targets,
+        checks=[
+            CheckOut(name=c.name, expected=c.expected, actual=c.actual, ok=c.ok)
+            for c in preview.checks
+        ],
+        metadata=preview.metadata,
         rows=rows,
-        errors=errors,
+        errors=[RowErrorOut(line_number=e.line_number, message=e.message) for e in preview.errors],
     )
 
 
+def _mapping(session: Session, mapping_id: int | None) -> ImportMapping | None:
+    return None if mapping_id is None else get_or_404(session, ImportMapping, mapping_id)
+
+
+def _lines(text: str) -> frozenset[int]:
+    """`"4, 7"` -> `{4, 7}`."""
+    try:
+        return frozenset(int(part) for part in text.split(",") if part.strip())
+    except ValueError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "skip_lines must be line numbers like 4,7"
+        ) from exc
+
+
 @router.post("/imports/preview", response_model=PreviewOut)
-async def preview_import(file: Upload, mapping_id: MappingId, session: SessionDep) -> PreviewOut:
-    mapping = get_or_404(session, ImportMapping, mapping_id)
+async def preview_import(
+    file: Upload, session: SessionDep, mapping_id: MappingId = None
+) -> PreviewOut:
+    mapping = _mapping(session, mapping_id)
     content, filename = await _read_upload(file)
     try:
-        preview = build_preview(session, mapping, content, filename)
+        preview = build_preview(session, content, filename, mapping)
     except ImportFileError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     return _preview_out(preview)
@@ -113,16 +153,25 @@ async def preview_import(file: Upload, mapping_id: MappingId, session: SessionDe
 @router.post("/imports", response_model=ImportBatchOut, status_code=status.HTTP_201_CREATED)
 async def commit(
     file: Upload,
-    mapping_id: MappingId,
     session: SessionDep,
     settings: SettingsDep,
+    mapping_id: MappingId = None,
     skip_invalid_rows: Annotated[bool, Form()] = False,
+    skip_lines: Annotated[str, Form()] = "",
 ) -> Any:
-    mapping = get_or_404(session, ImportMapping, mapping_id)
+    """`skip_lines`: comma-separated line numbers to leave out, e.g. near-duplicates."""
+    mapping = _mapping(session, mapping_id)
+    lines_to_skip = _lines(skip_lines)
     content, filename = await _read_upload(file)
     try:
         return commit_import(
-            session, mapping, content, filename, settings.uploads_dir, skip_invalid_rows
+            session,
+            content,
+            filename,
+            settings.uploads_dir,
+            mapping,
+            skip_invalid_rows,
+            lines_to_skip,
         )
     except ImportFileError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
@@ -133,3 +182,31 @@ async def commit(
 @router.get("/imports", response_model=list[ImportBatchOut])
 def list_imports(session: SessionDep) -> list[ImportBatch]:
     return list(session.scalars(select(ImportBatch).order_by(ImportBatch.id.desc())))
+
+
+@router.get("/source-accounts", response_model=list[SourceAccountOut])
+def list_source_accounts(session: SessionDep) -> list[SourceAccount]:
+    return list(session.scalars(select(SourceAccount).order_by(SourceAccount.key)))
+
+
+@router.put("/source-accounts/{key:path}", response_model=SourceAccountOut)
+def map_source_account(key: str, body: SourceAccountIn, session: SessionDep) -> SourceAccount:
+    """Map a statement target (e.g. `santander/CA/ARS`) to an account, for all later imports."""
+    get_or_404(session, Account, body.account_id)
+    source = session.scalar(select(SourceAccount).where(SourceAccount.key == key))
+    if source is None:
+        source = SourceAccount(key=key, account_id=body.account_id)
+        session.add(source)
+    else:
+        source.account_id = body.account_id
+    commit_or_409(session, "source account")
+    return source
+
+
+@router.delete("/source-accounts/{key:path}", status_code=status.HTTP_204_NO_CONTENT)
+def unmap_source_account(key: str, session: SessionDep) -> None:
+    source = session.scalar(select(SourceAccount).where(SourceAccount.key == key))
+    if source is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"no account mapped for {key}")
+    session.delete(source)
+    session.commit()

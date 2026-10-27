@@ -30,6 +30,12 @@ just test-file backend/tests/test_api.py      # one file (backend/... or fronten
 cd backend && uv run pytest tests/test_api.py::test_import_dedupes_same_file_and_overlaps
 just check                      # ruff, ruff format --check, mypy --strict, oxlint, tsc
 just format
+just redact <file> --name "…"   # redacted sample of a statement into samples/ (xlsx/csv/pdf)
+just preview samples/x.redacted.json   # render a PDF words sample back to a PDF
+just sample-check               # run every importer over samples/: counts and checks only
+# Sample digits are random, so value checks fail on samples. To verify checks, run the
+# recipe on a folder of real statements: it prints counts and pass/fail only.
+cd backend && uv run python -m mis_finanzas.tools.sample_check <folder>
 ```
 
 Node comes from `n` (`/usr/local/bin/node`, v22). The apt `/usr/bin/node` v12 is too old.
@@ -48,6 +54,18 @@ Dependencies point one way: `api → importers/reports → ledger/market → cor
 - `importers/`: parsing is pure (bytes → `ParseResult`, no DB). `service.py` builds the preview
   and commits. Preview and commit both re-parse the upload, so the server keeps no state
   between them.
+  - A file is read either by a saved column mapping (`tabular.py`, one account), or by the
+    one dedicated importer in `registry.py` that recognizes it by content.
+  - Dedicated importers emit rows with a `target` (`santander/CA/ARS`). Each target is
+    mapped once to an account (`source_accounts`); an unmapped target blocks the commit.
+  - They also emit `checks` (statement totals against parsed sums). A failed check blocks the
+    commit: it means the layout was misread.
+  - Importers live in a package per institution (`importers/santander/`) and are registered
+    in `importers/catalog.py`.
+  - PDF importers work on `PageWords` (`pdf_words.py`), so they also run on the redacted JSON
+    samples. Use `pdf_layout.py` to read tables: header rows need **all** labels, so data is
+    only read under the right table.
+- `tools/`: the redaction, preview and sample-check commands. Nothing in the app imports it.
 - `market/`: the FX rate source adapters, the daily refresh and the date → rate lookup.
 - `reports/`: monthly and per-category totals in both currencies.
 
@@ -56,16 +74,24 @@ Domain rules that the code relies on:
   strings in JSON. FX rates use `DecimalText`. Never use float.
 - **Only `income`/`expense` kinds count in totals.** `transfer` (paired rows across own
   accounts), `fx` and `investment` don't. A category's `kind` overrides the sign-based kind.
-- **Dedup fingerprint** = account, date, cents, normalized description and occurrence index
-  within the file. This makes overlapping exports (PDF + Excel of the same month) safe, while
-  two identical same-day purchases stay distinct. A file whose sha256 was already imported is
-  rejected. Originals are stored at `<data_dir>/uploads/<sha256><ext>`.
+- **Dedup fingerprint** (v2) = account, date, cents and occurrence index among rows with the
+  same date and amount in the file. There is **no description**, because two exports of one
+  account word it differently. Overlapping files (the Excel and the PDF of the same month)
+  dedupe, while two identical same-day purchases stay distinct.
+  - A new row whose account has the same amount within ±3 days is flagged
+    `near_duplicate`; the commit takes `skip_lines` to leave such rows out.
+  - A file whose sha256 was already imported is rejected. Originals are stored at
+    `<data_dir>/uploads/<sha256><ext>`.
+- **Descriptions are normalized** by `ledger/text.normalize_description`: HTML entities
+  decoded, double-encoded accents repaired, invisible characters dropped, accents stripped,
+  uppercased. Banks emit all of these.
 - **USD conversion** uses the MEP *sell* rate of the transaction date, or of the closest
   earlier date in the table. A row with no rate counts in `missing_rate`; it is not silently
   converted.
-- Dedicated per-bank parsers (PDF statements, etc.) need real sample files. Don't write one
-  from a guessed format. Until then, sources import through `importers/tabular.py` with a saved
-  column mapping.
+- Dedicated per-bank parsers need a redacted sample in `samples/`. Never write one from a
+  guessed format, and never copy a sample's values into the repo; fixtures are synthetic.
+  Until a parser exists, a source imports through `importers/tabular.py` with a saved column
+  mapping.
 
 Schema changes need an Alembic migration in `migrations/versions/`. The app upgrades the DB on
 startup. `tests/test_migrations.py` fails if the models and migrations drift. Generate a
