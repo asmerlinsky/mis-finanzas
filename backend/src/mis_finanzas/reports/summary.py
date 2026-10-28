@@ -92,6 +92,23 @@ def expenses_by_category(session: Session, start: date, end: date) -> dict[str, 
     return dict(sorted(totals.items(), key=lambda item: item[1].ars, reverse=True))
 
 
+def expenses_by_category_month(
+    session: Session, start: date, end: date
+) -> dict[str, dict[str, Totals]]:
+    """Category -> month ("YYYY-MM") -> expenses, as positive totals. Same rules as
+    `expenses_by_category`; categories by total pesos over the range, largest first."""
+    rates = load_rate_table(session)
+    found: dict[str, dict[str, Totals]] = defaultdict(lambda: defaultdict(Totals))
+    for tx in _counted_transactions(session, start, end):
+        if tx.kind is TransactionKind.EXPENSE:
+            name = tx.category.name if tx.category else UNCATEGORIZED
+            found[name][tx.date.strftime("%Y-%m")].add(_negate(to_dual(tx, rates)))
+    ordered = sorted(
+        found.items(), key=lambda item: sum(t.ars for t in item[1].values()), reverse=True
+    )
+    return {name: dict(sorted(months.items())) for name, months in ordered}
+
+
 def category_by_month(
     session: Session, category: str, start: date, end: date
 ) -> list[tuple[str, Totals]]:
@@ -102,6 +119,39 @@ def category_by_month(
         if tx.category is not None and tx.category.name == category:
             months.setdefault(tx.date.strftime("%Y-%m"), Totals()).add(to_dual(tx, rates))
     return sorted(months.items())
+
+
+OTHER_INSTRUMENT = "Otros"
+
+
+@dataclass
+class InstrumentTotals:
+    ticker: str
+    totals: Totals = field(default_factory=Totals)
+    payments: int = 0  # movements of money in
+
+
+def _ticker(description_norm: str) -> str:
+    """`DIVIDENDO EN EFECTIVO / AAPL` -> `AAPL`."""
+    if "/" not in description_norm:
+        return OTHER_INSTRUMENT
+    return description_norm.rsplit("/", 1)[-1].strip().split(" ")[0] or OTHER_INSTRUMENT
+
+
+def category_by_instrument(
+    session: Session, category: str, start: date, end: date
+) -> list[InstrumentTotals]:
+    """One category's net total per instrument, the ticker read after the description's last
+    `/`; largest first. For "Dividendos", each dividend net of the fees charged on it."""
+    rates = load_rate_table(session)
+    found: dict[str, InstrumentTotals] = {}
+    for tx in _counted_transactions(session, start, end):
+        if tx.category is not None and tx.category.name == category:
+            ticker = _ticker(tx.description_norm)
+            item = found.setdefault(ticker, InstrumentTotals(ticker))
+            item.totals.add(to_dual(tx, rates))
+            item.payments += tx.amount_cents > 0
+    return sorted(found.values(), key=lambda i: i.totals.ars, reverse=True)
 
 
 def _negate(amount: DualAmount) -> DualAmount:

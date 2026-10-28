@@ -61,6 +61,7 @@ export interface TransactionPage {
 
 export interface TransactionFilters {
   account_id?: number
+  category_id?: number
   kind?: TransactionKind
   search?: string
   uncategorized?: boolean
@@ -214,6 +215,13 @@ export interface PositionValue {
   price: { price: string; date: string; origin: 'mercado' | 'resumen' } | null
   value_ars: string | null
   value_usd: string | null
+  /** Share of the quantity whose cost is known (0..1); null: none is. */
+  coverage: string | null
+  cost_ars: string | null
+  cost_usd: string | null
+  /** Of the part whose cost is known. */
+  gain_ars: string | null
+  gain_usd: string | null
 }
 
 export interface CashValue {
@@ -234,6 +242,29 @@ export interface Portfolio {
   positions: PositionValue[]
   cash: CashValue[]
   allocation: { asset_class: string; ars: string }[]
+  /** Over the parts of positions whose cost is known. */
+  cost_ars: string
+  gain_ars: string
+  cost_usd: string
+  gain_usd: string
+}
+
+/** The portfolio's value on a day: a holdings statement's date, or a day with prices. */
+export interface HistoryPoint {
+  date: string
+  ars: string
+  usd: string | null
+  source: 'resumen' | 'mercado'
+}
+
+/** Net dividends of one instrument over a range. */
+export interface InstrumentDividends {
+  ticker: string
+  name: string | null
+  ars: string
+  usd: string
+  payments: number
+  missing_rate: number
 }
 
 export interface MonthAmount {
@@ -359,5 +390,16 @@ export interface RuleSuggestion extends RulePreview {
   last_date: string
   accounts: string[]
   total_ars: string
+  missing_rate: number
+}
+
+/** Expenses of one category per month (positive totals). */
+export interface CategoryMonths {
+  category: string
+  /** null: «Sin categoría». */
+  category_id: number | null
+  months: { month: string; ars: string; usd: string }[]
+  total_ars: string
+  total_usd: string
   missing_rate: number
 }

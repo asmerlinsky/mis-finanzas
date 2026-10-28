@@ -673,6 +673,36 @@ Notes from implementing it:
 - **To confirm on real data:** the owner opens Movimientos after the update and checks the
   proposed exchanges and their rates.
 
+## Follow-up — Expenses by month, and a better Inversiones (M) — done
+
+- [x] **Gastos por categoría, por mes** (`reports/summary.py::expenses_by_category_month`,
+  `GET /api/reports/categories/monthly`).
+  - Resumen gets a "Total / Por mes" toggle: one row per category, one column per month,
+    with the same rules as the totals (expenses only, refunds reduce).
+  - Clicking a month's amount (or a category's total) lists its movements under the table.
+    `GET /api/transactions` gained a `category_id` filter for it.
+- [x] **Positions** grouped by asset class, with subtotals, weight, sortable headers and a
+  "precio viejo" tag on a price more than 3 days older than the newest one.
+- [x] **Gain per position** (`investments/cost_basis.py`): average cost from the imported
+  trades, in pesos and in dollars at each trade's MEP.
+  - What was held before the first imported trade has an unknown cost, so the gain covers
+    the known part only ("parcial (x%)").
+  - Importing older movement statements completes it.
+- [x] **Value over time** (`valuation.py::value_history`, `GET /api/investments/history`):
+  - one point per holdings statement and per day with downloaded prices, for the last 365
+    days;
+  - `value_portfolio` on a past day uses only the snapshots up to it.
+- [x] **Dividends per instrument** (`reports/summary.py::category_by_instrument`,
+  `GET /api/investments/dividends/by-instrument`): net of fees, by the ticker after the last
+  `/`, with "Otros" for the rest.
+- Checked in headless Chrome with the synthetic Balanz and Santander fixtures: light, dark and
+  phone width. Only the month table scrolls sideways, so the heading and the panel stay in
+  view.
+- **To confirm on real data:**
+  - the month table matches the per-month totals the owner knows;
+  - the cost of each position matches Balanz's own "costo promedio" where the statements
+    cover the purchases.
+
 ## Verification (per phase)
 
 - `just test` and `just check` pass. Every parser has a synthetic fixture test covering:

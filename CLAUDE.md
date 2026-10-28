@@ -86,6 +86,10 @@ Dependencies point one way:
 - `investments/`: instruments, operations and holdings snapshots from broker statements.
   Parsers emit its plain records (`records.py`); `store.py` writes them in the import's
   transaction. Broker cash is ledger rows on the broker's accounts, not here.
+  - `cost_basis.py` (pure): average cost per instrument from the trades, with a known and an
+    unknown lot. Positions show the gain on the known part only.
+  - `valuation.py`: `value_portfolio(day)` uses only snapshots and prices up to `day`, and
+    `value_history` repeats it for the statement dates and price days of the last year.
 - `monotributo/`: issued invoices (upserted by type, point of sale and number), the owner's
   category, ARCA's category tables (`categories.json`, edited by hand twice a year) and the
   status math (`status.py`, pure).
@@ -98,7 +102,8 @@ Dependencies point one way:
   - It imports `core` and `ledger`.
 - `market/`: the FX rate and price source adapters (ArgentinaDatos MEP, data912 panels), the
   daily refresh and the date → rate lookup.
-- `reports/`: monthly and per-category totals in both currencies.
+- `reports/`: monthly and per-category totals in both currencies, category × month totals,
+  and a category's totals by instrument (dividends by ticker).
 
 Domain rules that the code relies on:
 - **Money** is `Decimal` in memory, integer cents in `transactions.amount_cents`, and decimal

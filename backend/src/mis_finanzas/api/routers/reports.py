@@ -1,11 +1,24 @@
 from datetime import date
+from decimal import Decimal
 
 from fastapi import APIRouter
+from sqlalchemy import select
 
 from mis_finanzas.api.deps import SessionDep
-from mis_finanzas.api.schemas import CategoryTotalOut, MarketStatusOut, MonthSummaryOut
+from mis_finanzas.api.schemas import (
+    CategoryMonthOut,
+    CategoryMonthsOut,
+    CategoryTotalOut,
+    MarketStatusOut,
+    MonthSummaryOut,
+)
+from mis_finanzas.ledger.models import Category
 from mis_finanzas.market.fx import load_rate_table, rate_status
-from mis_finanzas.reports.summary import expenses_by_category, monthly_summary
+from mis_finanzas.reports.summary import (
+    expenses_by_category,
+    expenses_by_category_month,
+    monthly_summary,
+)
 
 router = APIRouter(tags=["reports"])
 
@@ -33,6 +46,26 @@ def by_category(start: date, end: date, session: SessionDep) -> list[CategoryTot
         CategoryTotalOut(category=name, ars=t.ars, usd=t.usd, missing_rate=t.missing_rate)
         for name, t in expenses_by_category(session, start, end).items()
     ]
+
+
+@router.get("/reports/categories/monthly", response_model=list[CategoryMonthsOut])
+def by_category_month(start: date, end: date, session: SessionDep) -> list[CategoryMonthsOut]:
+    """Expenses per category and month; each cell's movements come from `/transactions`
+    with `category_id`, `kind=expense` and the month's dates."""
+    ids = {c.name: c.id for c in session.scalars(select(Category))}
+    found = []
+    for name, months in expenses_by_category_month(session, start, end).items():
+        found.append(
+            CategoryMonthsOut(
+                category=name,
+                category_id=ids.get(name),
+                months=[CategoryMonthOut(month=m, ars=t.ars, usd=t.usd) for m, t in months.items()],
+                total_ars=sum((t.ars for t in months.values()), Decimal(0)),
+                total_usd=sum((t.usd for t in months.values()), Decimal(0)),
+                missing_rate=sum(t.missing_rate for t in months.values()),
+            )
+        )
+    return found
 
 
 @router.get("/market/status", response_model=MarketStatusOut)
