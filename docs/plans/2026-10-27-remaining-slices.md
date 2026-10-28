@@ -571,6 +571,46 @@ Notes from implementing it:
   - the old-layout July Amex: its dates read correctly in the import preview, so the year-first
     order is right.
 
+## Follow-up — Rule suggestions (S) — done
+
+- [x] `ledger/suggestions.py`, pure:
+  - `merchant_key` drops the bank's type prefixes and card references, words with digits,
+    one-letter words and installments, and keeps 3 words;
+  - `pattern_for` gives the key as printed, because `contiene` rules match the normalized
+    text literally.
+- [x] `reports/rule_suggestions.py`:
+  - groups uncategorized income and expense movements, leaving out paired transfers;
+  - groups by key and sign, ranks by |total in pesos| (dollars at MEP), top 30;
+  - `would_categorize` and `conflicts` come from `rule_matches` with an unsaved rule.
+- [x] API: `GET /api/rules/suggestions`, `GET /api/rules/preview`. Creating a rule reuses
+  `POST /rules` and `/rules/apply`.
+- [x] Migration 0011 seeds starter category names, with no patterns.
+- [x] UI: "Sugerencias" on Categorías.
+  - Each row has an editable pattern (with "Probar"), the category (or a new one) and "Crear
+    regla", which creates the rule and applies it.
+  - Rows missing an MEP rate say so.
+- Checked in headless Chrome with a synthetic statement: 10 suggestions; creating one
+  categorized its movement and removed the row.
+- Defaults: rank by amount; income is included, apart from expenses. The "create a rule after
+  a manual change" prompt on Movimientos is left for later.
+- Unpaired card payments ("Tu pago en …" without the bank's debit imported) show up as income
+  suggestions. Pair them on Movimientos, rather than categorizing them.
+
+## Follow-up — Batch upload (S) — done
+
+- [x] The Import page takes several files at once. The owner chose to review them one by one,
+  not import them unseen, so possible duplicates are always seen before they go in.
+  - A queue (`pages/import/Queue.tsx`) lists each file: pendiente, revisando, importado (with
+    the result), salteado, no se pudo leer.
+  - The current file shows the usual preview. "Importar" commits it and moves on; "Saltear
+    este archivo" moves on without importing.
+  - Each preview is read when its turn comes, so it counts what earlier files in the batch
+    imported. Accounts mapped for one file apply to the next.
+- No backend change: the existing preview and commit endpoints, one file at a time.
+- Checked in headless Chrome with the synthetic account statement (with its Visa section)
+  followed by the Visa PDF of the same month. The second showed "0 movimientos nuevos, 7 ya
+  importados", was skipped, and the batch closed with its summary.
+
 ## Verification (per phase)
 
 - `just test` and `just check` pass. Every parser has a synthetic fixture test covering:
