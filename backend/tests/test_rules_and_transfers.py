@@ -115,6 +115,20 @@ def test_transfer_candidates_pair_closest_opposite_amounts() -> None:
     assert [(c.outgoing.id, c.incoming.id, c.days_apart) for c in candidates] == [(1, 3, 1)]
 
 
+def test_card_payment_pairs_in_each_currency() -> None:
+    """The bank pays the card from each account in its own currency: two transfers."""
+    bank_ars, bank_usd = _account(1), _account(2, Currency.USD)
+    card_ars, card_usd = _account(3), _account(4, Currency.USD)
+    rows = [
+        _tx(1, bank_ars, 10, -100000),
+        _tx(2, bank_usd, 10, -1000),
+        _tx(3, card_ars, 10, 100000),
+        _tx(4, card_usd, 10, 1000),
+    ]
+    candidates = find_transfer_candidates(rows)
+    assert {(c.outgoing.id, c.incoming.id) for c in candidates} == {(1, 3), (2, 4)}
+
+
 @pytest.mark.parametrize(
     "other",
     [
