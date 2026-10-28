@@ -120,7 +120,12 @@ function Investments({ summary }: { summary: InvestmentSummary | null }) {
 function Invoices({ summary }: { summary: InvoiceSummary | null }) {
   if (!summary) return null
   if (summary.pdf_for) {
-    return (
+    return summary.pdf_creates ? (
+      <p>
+        PDF de <strong>{summary.pdf_for}</strong>: todavía no está en Mis Comprobantes, así que
+        se carga desde el PDF. Cuando importes Mis Comprobantes se confirma.
+      </p>
+    ) : (
       <p>
         PDF de <strong>{summary.pdf_for}</strong>: se adjunta a ese comprobante.
       </p>

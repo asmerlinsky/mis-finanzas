@@ -159,6 +159,7 @@ tr.duplicate td {
 }
 
 .tag {
+  white-space: nowrap;
   margin-left: 8px;
   padding: 1px 6px;
   border-radius: 4px;

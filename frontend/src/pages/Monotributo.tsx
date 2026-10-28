@@ -7,6 +7,8 @@ import { send, uploadFile, useApiMutation, useInvoices, useMonotributoStatus } f
 import type { ImportBatch, Invoice, MonotributoStatus } from '../api/types'
 import { Empty, ErrorNote, Money, Section } from '../components/ui'
 import { formatDate, formatMoney, formatMonth, formatPercent, monthsBetween } from '../lib/format'
+import { InvoiceTable } from './monotributo/Invoices'
+import { Projection } from './monotributo/Projection'
 
 const LEVEL_MESSAGES: Record<string, string> = {
   '0.8': 'Ya facturaste el 80 % del tope de tu categoría en los últimos 12 meses.',
@@ -154,46 +156,15 @@ function PdfUploader() {
   )
 }
 
-function InvoiceTable({ invoices }: { invoices: Invoice[] }) {
+/** Invoices known from their PDF alone may not be all of them: the export settles it. */
+function PdfOnlyNote({ invoices }: { invoices: Invoice[] }) {
+  const count = invoices.filter((i) => i.source === 'pdf').length
+  if (count === 0) return null
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>Fecha</th>
-          <th>Comprobante</th>
-          <th>Receptor</th>
-          <th className="num">Importe</th>
-          <th className="num">Pesos</th>
-          <th>PDF</th>
-        </tr>
-      </thead>
-      <tbody>
-        {invoices.map((i) => (
-          <tr key={i.id}>
-            <td>{formatDate(i.issued_on)}</td>
-            <td>
-              {i.type_label} <code>{i.number}</code>
-            </td>
-            <td>{i.receiver_name}</td>
-            <td className="num">
-              <Money value={i.total} currency={i.currency} />
-            </td>
-            <td className="num">
-              <Money value={i.total_ars} currency="ARS" />
-            </td>
-            <td>
-              {i.has_pdf ? (
-                <a href={`/api/monotributo/invoices/${i.id}/pdf`} target="_blank" rel="noreferrer">
-                  ver
-                </a>
-              ) : (
-                <span className="muted">—</span>
-              )}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <p className="banner warning">
+      {count} comprobantes cargados solo desde el PDF: importá «Mis Comprobantes – Emitidos» de
+      ARCA para confirmar que no falte ninguno (el total de los últimos 12 meses depende de eso).
+    </p>
   )
 }
 
@@ -224,12 +195,14 @@ export function Monotributo() {
           </>
         )}
       </Section>
+      {data && <Projection status={data} />}
       <Section title="Comprobantes emitidos">
         <ErrorNote error={invoices.error} />
         {invoices.data?.length === 0 && (
           <Empty>Importá el CSV de “Mis Comprobantes – Emitidos” de ARCA desde Importar.</Empty>
         )}
         <PdfUploader />
+        <PdfOnlyNote invoices={invoices.data ?? []} />
         {invoices.data && invoices.data.length > 0 && <InvoiceTable invoices={invoices.data} />}
       </Section>
     </>

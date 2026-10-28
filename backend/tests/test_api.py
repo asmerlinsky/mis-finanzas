@@ -208,3 +208,15 @@ def test_crud_conflicts_and_not_found(client: TestClient) -> None:
     assert client.post("/api/accounts", json=body).status_code == 409
     assert client.put("/api/accounts/999", json=body).status_code == 404
     assert client.post("/api/accounts", json={**body, "kind": "nope"}).status_code == 422
+
+
+def test_confirm_all_transfer_suggestions_at_once(client: TestClient, bank_mapping: int) -> None:
+    broker_mapping = _setup_account(client, "Broker", kind="broker")
+    _upload(client, "/api/imports", bank_mapping, JANUARY)
+    _upload(client, "/api/imports", broker_mapping, BROKER)
+    suggested = client.get("/api/transfers/candidates").json()
+    assert client.post("/api/transfers/all").json() == {"linked": len(suggested)}
+    assert client.get("/api/transfers/candidates").json() == []
+    linked = client.get("/api/transactions", params={"search": "BROKER"}).json()["items"]
+    assert linked and all(t["kind"] == "transfer" for t in linked)
+    assert client.post("/api/transfers/all").json() == {"linked": 0}

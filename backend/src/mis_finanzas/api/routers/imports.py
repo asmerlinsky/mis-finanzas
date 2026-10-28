@@ -137,6 +137,7 @@ def _invoices_out(summary: InvoiceSummary | None) -> InvoiceSummaryOut | None:
         new=summary.new,
         changed=summary.changed,
         pdf_for=summary.pdf_for,
+        pdf_creates=summary.pdf_creates,
     )
 
 

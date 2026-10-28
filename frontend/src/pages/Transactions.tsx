@@ -17,22 +17,29 @@ import type {
 } from '../api/types'
 import { Empty, ErrorNote, Money, Section } from '../components/ui'
 import { formatDate, KIND_LABELS } from '../lib/format'
+import { ExchangeCandidates } from './transactions/ExchangeCandidates'
 
 const PAGE_SIZE = 100
 
-function TransferCandidates() {
+export function TransferCandidates() {
   const { data } = useTransferCandidates()
   const link = useApiMutation((ids: { outgoing_id: number; incoming_id: number }) =>
     send('POST', '/transfers', ids),
   )
+  const linkAll = useApiMutation(() => send<{ linked: number }>('POST', '/transfers/all'))
   if (!data || data.length === 0) return null
+  const actions = (
+    <button onClick={() => linkAll.mutate(undefined)} disabled={linkAll.isPending}>
+      Confirmar todas
+    </button>
+  )
   return (
-    <Section title={`Posibles transferencias entre tus cuentas (${data.length})`}>
+    <Section title={`Posibles transferencias entre tus cuentas (${data.length})`} actions={actions}>
       <p className="muted">
         Confirmalas para que no cuenten como ingreso ni gasto (por ejemplo, el pago de la tarjeta
         desde el banco).
       </p>
-      <ErrorNote error={link.error} />
+      <ErrorNote error={link.error ?? linkAll.error} />
       <table>
         <tbody>
           {data.map(({ outgoing, incoming, days_apart }) => (
@@ -222,6 +229,7 @@ export function Transactions() {
   return (
     <>
       <TransferCandidates />
+      <ExchangeCandidates />
       <Section title="Movimientos">
         <Filters filters={filters} onChange={setFilters} />
         <ErrorNote error={error} />

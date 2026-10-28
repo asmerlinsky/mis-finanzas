@@ -147,3 +147,30 @@ def test_0011_seeds_starter_categories_once(tmp_path: Path) -> None:
         n for n, _ in names
     }
     assert rules == 0  # names only: patterns come from the owner's data
+
+
+def test_0014_takes_existing_dollar_sales_out_of_income_and_expense(tmp_path: Path) -> None:
+    url = f"sqlite:///{tmp_path / 'm.db'}"
+    command.upgrade(alembic_config(url), "0013")
+    engine = create_engine(url)
+    with engine.begin() as db:
+        db.execute(text("INSERT INTO accounts VALUES (1, 'Banco', 'X', 'bank', 'ARS')"))
+        db.execute(text("INSERT INTO categories (id, name, kind) VALUES (50, 'Mía', NULL)"))
+        db.execute(
+            text(
+                "INSERT INTO transactions (id, account_id, date, amount_cents, description_raw, "
+                "description_norm, kind, category_id, fingerprint) VALUES "
+                "(1, 1, '2026-05-08', 100, 'x', 'LIQUIDACION TITULOS PUBLICOS CREDI', 'income', "
+                "NULL, 'a'), "
+                "(2, 1, '2026-05-08', -100, 'x', 'LIQUIDACION TITULOS DEBITO', 'expense', 50, 'b')"
+            )
+        )
+    upgrade_to_head(url)
+    with engine.connect() as db:
+        rows = db.execute(
+            text(
+                "SELECT t.id, t.kind, c.name FROM transactions t "
+                "LEFT JOIN categories c ON c.id = t.category_id ORDER BY t.id"
+            )
+        ).all()
+    assert rows == [(1, "fx", "Cambio de moneda"), (2, "expense", "Mía")]  # owner's own kept

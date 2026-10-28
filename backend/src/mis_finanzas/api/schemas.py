@@ -101,6 +101,15 @@ class TransferCandidateOut(BaseModel):
     days_apart: int
 
 
+class ExchangeCandidateOut(BaseModel):
+    """Two sides of a currency exchange between own accounts, on one day."""
+
+    outgoing: TransactionOut
+    incoming: TransactionOut
+    rate: Decimal  # pesos per dollar it implies
+    mep: Decimal | None  # that day's MEP sell rate, to compare
+
+
 class TransferLinkIn(BaseModel):
     outgoing_id: int
     incoming_id: int
@@ -168,6 +177,7 @@ class InvoiceSummaryOut(BaseModel):
     new: int
     changed: list[str]
     pdf_for: str | None
+    pdf_creates: bool = False  # no invoice matches the PDF yet: it creates it
 
 
 class PreviewOut(BaseModel):
@@ -297,6 +307,34 @@ class MonthAmountArsOut(BaseModel):
     ars: Decimal
 
 
+class ProjectedMonthOut(BaseModel):
+    month: str
+    invoiced: Decimal  # pesos: invoiced so far, or the projection where that's more
+    rolling: Decimal  # the 12 months ending with this month
+    usage: Decimal | None
+    level: Decimal | None
+
+
+class ProjectionOut(BaseModel):
+    amount: Decimal  # per month, in `currency`
+    currency: Currency
+    rate: Decimal  # pesos per unit, from the latest invoice in that currency
+    manual: bool  # the owner's own amount; otherwise last month's invoicing
+    last_month: str
+    last_month_amount: Decimal
+    ask: bool  # last month differs from the owner's amount: ask whether to update it
+    monthly_ars: Decimal
+    months: list[ProjectedMonthOut]
+    first_over: str | None  # the first month over the current category's cap
+    recategorization_income: Decimal
+    implied: MonotributoCategoryOut | None
+
+
+class ProjectionIn(BaseModel):
+    amount: Decimal = Field(ge=0)
+    currency: Currency
+
+
 class MonotributoStatusOut(BaseModel):
     today: date
     table_valid_from: date
@@ -310,6 +348,23 @@ class MonotributoStatusOut(BaseModel):
     margin: Decimal | None
     next: RecategorizationOut
     monthly: list[MonthAmountArsOut]
+    projection: ProjectionOut
+
+
+class InvoicePaymentOut(BaseModel):
+    """A movement that paid (or may have paid) an invoice."""
+
+    transaction_id: int
+    date: date
+    amount: Decimal
+    currency: Currency
+    account_name: str
+    description: str
+    exact: bool  # the invoice total, to the cent
+
+
+class PaymentLinkIn(BaseModel):
+    transaction_id: int
 
 
 class InvoiceOut(BaseModel):
@@ -324,6 +379,9 @@ class InvoiceOut(BaseModel):
     fx_rate: Decimal
     total_ars: Decimal  # signed: credit notes subtract
     has_pdf: bool
+    source: str  # "export" (Mis Comprobantes) or "pdf" (its PDF alone, not yet confirmed)
+    payment: InvoicePaymentOut | None
+    suggestion: InvoicePaymentOut | None  # the likely payment, to confirm
 
 
 class ProfileIn(BaseModel):

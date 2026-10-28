@@ -5,9 +5,12 @@
   the big letter (`C`, `E`): together they give the comprobante type;
 - `Compr. Nro: PPPPP-NNNNNNNN`, `Fecha de Emisión: dd/mm/yyyy`;
 - `Importe Total: USD 3907,69` (or `$ …`): the total and its currency;
+- `Tipo de Cambio: 2949.488593` (a dot decimal), when printed;
+- `Señor(es): <receiver>`, up to `Domicilio:`;
 - `CAE N°: …`.
 
-Nothing else is read: not the receiver, the items or the issuer's data.
+Nothing else is read: not the items or the issuer's data. Without its invoice in Mis
+Comprobantes, these fields are enough to create it from the PDF alone.
 
 **Check:** the `COD.` printed under the letter equals the type read from title and letter.
 Whether the invoice exists, and its total and CAE, are checked against Mis Comprobantes when
@@ -18,6 +21,7 @@ import re
 from datetime import datetime
 from decimal import Decimal
 
+from mis_finanzas.core.money import parse_amount
 from mis_finanzas.importers.amounts import parse_money
 from mis_finanzas.importers.base import Check, ImportFileError, ParseResult
 from mis_finanzas.importers.pdf_layout import Line, lines, visible
@@ -41,6 +45,8 @@ _ISSUED = re.compile(r"FECHA DE EMISION:\s*(\d{2}/\d{2}/\d{4})")
 _TOTAL = re.compile(r"Importe Total:\s*(.+)$", re.IGNORECASE)
 _CAE = re.compile(r"CAE N\S*:?\s*(\d{14})")
 _CODE = re.compile(r"^COD\.\s*(\d+)$")
+_RATE = re.compile(r"Tipo de Cambio:\s*(\d[\d.,]*)", re.IGNORECASE)
+_RECEIVER = re.compile(r"Señor\(es\):\s*(.*?)(?:\s+Domicilio:.*)?$", re.IGNORECASE)
 
 
 def _texts(page: PageWords) -> list[tuple[Line, str]]:
@@ -70,6 +76,22 @@ def _total(texts: list[tuple[Line, str]]) -> tuple[Decimal, str]:
     raise ImportFileError("Importe Total not found")
 
 
+def _rate(texts: list[tuple[Line, str]]) -> Decimal | None:
+    """`2949.488593` (a dot decimal), or `1.436,00` should a comma decimal ever print."""
+    for line, _ in texts:
+        if match := _RATE.search(line.text):
+            text = match.group(1).rstrip(".,")
+            return parse_amount(text) if "," in text else Decimal(text)
+    return None
+
+
+def _receiver(texts: list[tuple[Line, str]]) -> str:
+    for line, _ in texts:
+        if match := _RECEIVER.search(line.text):
+            return match.group(1).strip()
+    return ""
+
+
 def _required(texts: list[tuple[Line, str]], pattern: re.Pattern[str], what: str) -> re.Match[str]:
     match = _find(texts, pattern)
     if match is None:
@@ -94,6 +116,8 @@ def read_invoice(page: PageWords) -> tuple[ParsedInvoicePdf, int | None]:
         currency=currency,
         total=total,
         cae=_required(texts, _CAE, "CAE").group(1),
+        fx_rate=_rate(texts),
+        receiver_name=_receiver(texts),
     )
     return invoice, int(code.group(1)) if code else None
 

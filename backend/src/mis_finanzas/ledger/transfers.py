@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from mis_finanzas.ledger.models import Transaction, TransactionKind
+from mis_finanzas.ledger.rules import infer_kind
 
 MAX_DAYS_APART = 3
 
@@ -63,9 +64,10 @@ def link_transfer(outgoing: Transaction, incoming: Transaction) -> None:
 
 
 def unlink_transfer(transaction: Transaction, pair: Transaction | None) -> None:
-    """Undo a transfer link; each side goes back to income/expense by sign."""
+    """Undo a transfer or exchange link. Each side's kind follows its category again: a
+    transfer's sides (no category) go back to income/expense by sign; an exchange's keep `fx`."""
     for side in (transaction, pair):
         if side is None:
             continue
         side.transfer_pair_id = None
-        side.kind = TransactionKind.INCOME if side.amount_cents > 0 else TransactionKind.EXPENSE
+        side.kind = infer_kind(side.amount_cents, side.category)

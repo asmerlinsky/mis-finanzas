@@ -88,7 +88,7 @@ describe('ImportPreview', () => {
   it('imports a Mis Comprobantes export and lists what changes', async () => {
     const handlers = setup(preview({
       importer: 'arca_mis_comprobantes_csv', new_count: 0, targets: [], checks: [],
-      invoices: { invoices: 4, new: 1, changed: ['Nota de Crédito E 00001-00000002'], pdf_for: null },
+      invoices: { invoices: 4, new: 1, changed: ['Nota de Crédito E 00001-00000002'], pdf_for: null, pdf_creates: false },
     }))
     expect(screen.getByText(/comprobantes:/)).toHaveTextContent(
       '4 comprobantes: 1 nuevos, 1 con cambios, 2 sin cambios. Cambian: Nota de Crédito E 00001-00000002.',
@@ -100,7 +100,7 @@ describe('ImportPreview', () => {
   it('attaches an invoice PDF', () => {
     setup(preview({
       importer: 'arca_invoice_pdf', new_count: 0, targets: [], checks: [],
-      invoices: { invoices: 0, new: 0, changed: [], pdf_for: 'Factura E 00001-00000007' },
+      invoices: { invoices: 0, new: 0, changed: [], pdf_for: 'Factura E 00001-00000007', pdf_creates: false },
     }))
     expect(screen.getByText(/se adjunta a ese comprobante/)).toHaveTextContent('Factura E 00001-00000007')
     expect(screen.getByRole('button', { name: 'Adjuntar PDF' })).toBeEnabled()

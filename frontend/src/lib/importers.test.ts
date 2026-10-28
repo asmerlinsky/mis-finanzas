@@ -50,6 +50,26 @@ describe('blockers', () => {
     expect(blockers(bad, true, 0)).toHaveLength(4) // errors skipped on purpose
   })
 
+  it('explains an invoice PDF that lacks its rate or differs from its invoice', () => {
+    const check = (name: string, ok: boolean) => ({ name, expected: '1', actual: ok ? '1' : '0', ok })
+    const invoices = { invoices: 0, new: 0, changed: [], pdf_for: 'Factura E 00001-00000003' }
+    const noRate = preview({
+      importer: 'arca_invoice_pdf', invoices: { ...invoices, pdf_creates: true },
+      checks: [check('tipo de cambio', false)],
+    })
+    expect(blockers(noRate, false, 0)).toEqual([
+      'No se pudo leer el tipo de cambio del PDF, que hace falta para cargar una factura en ' +
+        'dólares sin Mis Comprobantes.',
+    ])
+    const differs = preview({
+      importer: 'arca_invoice_pdf', invoices: { ...invoices, pdf_creates: false },
+      checks: [check('importe total', true), check('CAE', false)],
+    })
+    expect(blockers(differs, false, 0)).toEqual([
+      'El PDF no coincide con su comprobante de Mis Comprobantes (ver lo marcado con ✗).',
+    ])
+  })
+
   it('lets a broker statement through with no new movements', () => {
     const investments = {
       as_of: '2026-10-27', source: 'tenencias' as const, positions: 1, cash: 0,

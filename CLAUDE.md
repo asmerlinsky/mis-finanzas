@@ -61,6 +61,8 @@ Dependencies point one way:
   - rule matching (`rules.py`);
   - fingerprints (`dedup.py`);
   - transfer pairing (`transfers.py`);
+  - exchange pairing (`exchanges.py`): same-day `fx` movements in two currencies, linked
+    like transfers but kept as `fx`; pairs closest to the day's MEP first, none beyond 10%.
   - rule suggestions (`suggestions.py`): uncategorized movements grouped by merchant key.
     `reports/rule_suggestions.py` ranks them in pesos and counts what each rule would catch
     (`GET /api/rules/suggestions`, `GET /api/rules/preview`).
@@ -86,7 +88,14 @@ Dependencies point one way:
   transaction. Broker cash is ledger rows on the broker's accounts, not here.
 - `monotributo/`: issued invoices (upserted by type, point of sale and number), the owner's
   category, ARCA's category tables (`categories.json`, edited by hand twice a year) and the
-  status math (`status.py`, pure). It imports `core` only.
+  status math (`status.py`, pure).
+  - An invoice comes from the Mis Comprobantes export, or from its PDF alone (`source="pdf"`)
+    until an export confirms it.
+  - `payments.py` suggests the incoming movement that paid each invoice (exact amount, same
+    currency, near the date), and links the one the owner confirms or chooses.
+  - `status.py::project` projects the next 6 months from last month's invoicing, or from the
+    owner's own amount (on the profile), and asks when last month differs from it.
+  - It imports `core` and `ledger`.
 - `market/`: the FX rate and price source adapters (ArgentinaDatos MEP, data912 panels), the
   daily refresh and the date → rate lookup.
 - `reports/`: monthly and per-category totals in both currencies.
@@ -130,6 +139,14 @@ The frontend is `frontend/`: React 19 + Vite + TypeScript, TanStack Query, Recha
 - Navigation is hash-based (`#/movimientos`).
 
 ## Data and privacy
+
+**Never read the owner's real data, in any form.** That means the data dir
+(`~/.local/share/mis-finanzas`: the DB, `uploads/`, `auth.json`), Docker's `data/` and
+`backups/`, and real statement files. No queries, listings, copies or simulations, not even
+"counts only". This conversation leaves the machine, so reading them breaks the hard constraint
+above. Work from the redacted samples in `samples/` and synthetic fixtures. To verify against
+real data, give the owner a command to run locally that prints only counts or pass/fail
+(like `sample_check`); the owner decides what to share.
 
 The data dir defaults to `~/.local/share/mis-finanzas`. It holds the SQLite DB and the original
 uploads, and it is never inside the repo. `.gitignore` also blocks `samples/`, `*.db` and `.env`.

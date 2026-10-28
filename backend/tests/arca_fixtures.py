@@ -46,8 +46,13 @@ def invoice_row(
     ]  # fmt: skip
 
 
-def comprobantes_csv(rows: Sequence[list[str]]) -> bytes:
-    lines = [";".join(HEADER), *(";".join(row) for row in rows)]
+def _csv_line(fields: Sequence[str], quoted: bool) -> str:
+    return ";".join(f'"{f}"' if quoted else f for f in fields)
+
+
+def comprobantes_csv(rows: Sequence[list[str]], quoted: bool = False) -> bytes:
+    """`quoted`: every name and value in double quotes, as ARCA's own download prints them."""
+    lines = [_csv_line(HEADER, quoted), *(_csv_line(row, quoted) for row in rows)]
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 

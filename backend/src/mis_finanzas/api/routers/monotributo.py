@@ -8,15 +8,20 @@ from mis_finanzas.api.common import get_or_404
 from mis_finanzas.api.deps import SessionDep
 from mis_finanzas.api.schemas import (
     InvoiceOut,
+    InvoicePaymentOut,
     MonotributoCategoryOut,
     MonotributoStatusOut,
     MonthAmountArsOut,
+    PaymentLinkIn,
     ProfileIn,
+    ProjectedMonthOut,
+    ProjectionIn,
+    ProjectionOut,
     RecategorizationOut,
 )
 from mis_finanzas.core.money import from_cents
-from mis_finanzas.ledger.models import ImportBatch
-from mis_finanzas.monotributo import service
+from mis_finanzas.ledger.models import Currency, ImportBatch, Transaction
+from mis_finanzas.monotributo import payments, service
 from mis_finanzas.monotributo.categories import Category
 from mis_finanzas.monotributo.models import Invoice
 from mis_finanzas.monotributo.records import INVOICE_TYPES
@@ -57,10 +62,62 @@ def monotributo_status(session: SessionDep) -> MonotributoStatusOut:
             implied=_category(s.next.implied),
         ),
         monthly=[MonthAmountArsOut(month=m, ars=ars) for m, ars in overview.monthly],
+        projection=_projection_out(overview),
     )
 
 
-def _invoice_out(invoice: Invoice) -> InvoiceOut:
+def _projection_out(overview: service.Overview) -> ProjectionOut:
+    basis, projected = overview.basis, overview.projection
+    return ProjectionOut(
+        amount=basis.amount,
+        currency=Currency(basis.currency),
+        rate=basis.rate,
+        manual=basis.manual,
+        last_month=basis.last_month,
+        last_month_amount=basis.last_month_amount,
+        ask=basis.ask,
+        monthly_ars=basis.monthly_ars,
+        months=[
+            ProjectedMonthOut(
+                month=m.month, invoiced=m.invoiced, rolling=m.rolling, usage=m.usage, level=m.level
+            )
+            for m in projected.months
+        ],
+        first_over=projected.first_over,
+        recategorization_income=projected.recategorization_income,
+        implied=_category(projected.implied),
+    )
+
+
+@router.put("/monotributo/projection", status_code=status.HTTP_204_NO_CONTENT)
+def set_projection(body: ProjectionIn, session: SessionDep) -> None:
+    """The owner's monthly amount; also answers whether to update it after a different month."""
+    service.set_projection(session, body.amount, body.currency.value, date.today())
+
+
+@router.delete("/monotributo/projection", status_code=status.HTTP_204_NO_CONTENT)
+def clear_projection(session: SessionDep) -> None:
+    """Back to projecting last month's invoicing."""
+    service.clear_projection(session)
+
+
+def _payment_out(invoice: Invoice, tx: Transaction | None) -> InvoicePaymentOut | None:
+    if tx is None:
+        return None
+    return InvoicePaymentOut(
+        transaction_id=tx.id,
+        date=tx.date,
+        amount=from_cents(tx.amount_cents),
+        currency=tx.account.currency,
+        account_name=tx.account.name,
+        description=tx.description_raw,
+        exact=tx.amount_cents == invoice.total_cents,
+    )
+
+
+def _invoice_out(
+    invoice: Invoice, payment: Transaction | None, suggestion: Transaction | None
+) -> InvoiceOut:
     return InvoiceOut(
         id=invoice.id,
         type_code=invoice.type_code,
@@ -73,12 +130,49 @@ def _invoice_out(invoice: Invoice) -> InvoiceOut:
         fx_rate=invoice.fx_rate,
         total_ars=from_cents(invoice.total_ars_cents),
         has_pdf=invoice.pdf_batch_id is not None,
+        source=invoice.source,
+        payment=_payment_out(invoice, payment),
+        suggestion=_payment_out(invoice, suggestion),
     )
 
 
 @router.get("/monotributo/invoices", response_model=list[InvoiceOut])
 def list_invoices(session: SessionDep) -> list[InvoiceOut]:
-    return [_invoice_out(i) for i in service.invoices(session)]
+    invoices = service.invoices(session)
+    suggested = payments.suggestions(session, invoices)
+    return [
+        _invoice_out(
+            i,
+            session.get(Transaction, i.payment_transaction_id)
+            if i.payment_transaction_id
+            else None,
+            suggested.get(i.id),
+        )
+        for i in invoices
+    ]
+
+
+@router.get("/monotributo/invoices/{invoice_id}/candidates", response_model=list[InvoicePaymentOut])
+def payment_candidates(invoice_id: int, session: SessionDep) -> list[InvoicePaymentOut]:
+    """Movements that could have paid the invoice, the likeliest first."""
+    invoice = get_or_404(session, Invoice, invoice_id)
+    found = [_payment_out(invoice, c.transaction) for c in payments.candidates(session, invoice)]
+    return [c for c in found if c is not None]
+
+
+@router.put("/monotributo/invoices/{invoice_id}/payment", status_code=status.HTTP_204_NO_CONTENT)
+def link_payment(invoice_id: int, body: PaymentLinkIn, session: SessionDep) -> None:
+    invoice = get_or_404(session, Invoice, invoice_id)
+    tx = get_or_404(session, Transaction, body.transaction_id)
+    try:
+        payments.link(session, invoice, tx)
+    except payments.PaymentLinkError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+
+
+@router.delete("/monotributo/invoices/{invoice_id}/payment", status_code=status.HTTP_204_NO_CONTENT)
+def unlink_payment(invoice_id: int, session: SessionDep) -> None:
+    payments.unlink(session, get_or_404(session, Invoice, invoice_id))
 
 
 @router.get("/monotributo/invoices/{invoice_id}/pdf")
