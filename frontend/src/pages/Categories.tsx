@@ -4,6 +4,7 @@ import { send, useAccounts, useApiMutation, useCategories, useRules } from '../a
 import type { CategoryInput, TransactionKind } from '../api/types'
 import { Empty, ErrorNote, Section } from '../components/ui'
 import { KIND_LABELS } from '../lib/format'
+import { Suggestions } from './categories/Suggestions'
 
 const SIGN_LABELS = { any: 'cualquier signo', debit: 'solo débitos', credit: 'solo créditos' }
 
@@ -72,7 +73,8 @@ function RuleList() {
     >
       {apply.data && <p className="success">{apply.data.categorized} movimientos categorizados.</p>}
       <p className="muted">
-        Se crean desde Movimientos con «Regla…». Se aplican al importar, de menor a mayor prioridad.
+        Se crean desde Sugerencias o desde Movimientos con «Regla…». Se aplican al importar, de
+        menor a mayor prioridad.
       </p>
       {rules.length === 0 && <Empty>Sin reglas todavía.</Empty>}
       <table>
@@ -111,6 +113,7 @@ export function Categories() {
         <CategoryForm />
         <CategoryList />
       </Section>
+      <Suggestions />
       <RuleList />
     </>
   )

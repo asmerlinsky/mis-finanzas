@@ -291,3 +291,24 @@ export interface AuthStatus {
   /** This browser may use the API. */
   authenticated: boolean
 }
+
+/** What a rule would do before it's created. */
+export interface RulePreview {
+  /** Uncategorized movements it would catch. */
+  would_categorize: number
+  /** Movements already in a category that it also matches. */
+  conflicts: number
+}
+
+/** Uncategorized movements grouped by merchant, with the rule that would catch them. */
+export interface RuleSuggestion extends RulePreview {
+  pattern: string
+  example: string
+  sign: Exclude<AmountSign, 'any'>
+  count: number
+  first_date: string
+  last_date: string
+  accounts: string[]
+  total_ars: string
+  missing_rate: number
+}

@@ -52,6 +52,25 @@ class RuleOut(OrmModel, RuleIn):
     id: int
 
 
+class RulePreviewOut(BaseModel):
+    would_categorize: int  # uncategorized movements the rule would catch
+    conflicts: int  # movements already in a category that it also matches
+
+
+class RuleSuggestionOut(BaseModel):
+    pattern: str
+    example: str
+    sign: AmountSign  # debit (money out) or credit (money in)
+    count: int
+    first_date: date
+    last_date: date
+    accounts: list[str]
+    total_ars: Decimal
+    missing_rate: int
+    would_categorize: int
+    conflicts: int
+
+
 class TransactionOut(BaseModel):
     id: int
     account_id: int

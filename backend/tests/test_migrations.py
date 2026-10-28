@@ -97,3 +97,53 @@ def test_0007_seeds_inversiones_for_trades_only(tmp_path: Path) -> None:
     subscription = normalize_description("Liquidación de Suscripción / 123456 / FONDO A")
     assert all(any(p.search(line) for p in patterns) for line in (trade, subscription))
     assert not any(p.search("COMPRA CON TARJETA DE DEBITO BOLETO") for p in patterns)
+
+
+def test_0010_repairs_imported_descriptions(tmp_path: Path) -> None:
+    url = f"sqlite:///{tmp_path / 'm.db'}"
+    command.upgrade(alembic_config(url), "0009")
+    engine = create_engine(url)
+    damaged = "Transf. a mart&#227;\x8dn  gomez"  # MARTÍN, double-encoded, then lowercased
+    with engine.begin() as db:
+        db.execute(text("INSERT INTO accounts VALUES (1, 'Banco', 'X', 'bank', 'ARS')"))
+        db.execute(
+            text(
+                "INSERT INTO transactions (id, account_id, date, amount_cents, description_raw, "
+                "description_norm, kind, fingerprint) VALUES "
+                "(1, 1, '2026-01-05', -100, :raw, 'TRANSF. A MARTAN GOMEZ', 'expense', 'f1'), "
+                "(2, 1, '2026-01-06', -200, 'Pagó Rappi', 'PAGO RAPPI', 'expense', 'f2')"
+            ),
+            {"raw": damaged},
+        )
+    upgrade_to_head(url)
+    with engine.connect() as db:
+        rows = db.execute(
+            text("SELECT description_raw, description_norm FROM transactions ORDER BY id")
+        ).all()
+    assert rows == [
+        ("Transf. a martín gomez", "TRANSF. A MARTIN GOMEZ"),
+        ("Pagó Rappi", "PAGO RAPPI"),  # already clean: untouched
+    ]
+
+
+def test_0011_seeds_starter_categories_once(tmp_path: Path) -> None:
+    url = f"sqlite:///{tmp_path / 'm.db'}"
+    command.upgrade(alembic_config(url), "0010")
+    engine = create_engine(url)
+    with engine.begin() as db:
+        db.execute(text("INSERT INTO categories (name, kind) VALUES ('Salud', 'expense')"))
+    upgrade_to_head(url)
+    upgrade_to_head(url)
+    with engine.connect() as db:
+        names = db.execute(text("SELECT name, kind FROM categories ORDER BY name")).all()
+        rules = db.execute(
+            text(
+                "SELECT count(*) FROM category_rules r JOIN categories c ON c.id = r.category_id "
+                "WHERE c.name IN ('Supermercado', 'Transporte', 'Salud')"
+            )
+        ).scalar()
+    assert ("Salud", "expense") in names  # the owner's own category is kept
+    assert {"Supermercado", "Transporte", "Impuestos y comisiones", "Monotributo"} <= {
+        n for n, _ in names
+    }
+    assert rules == 0  # names only: patterns come from the owner's data

@@ -4,10 +4,18 @@ from sqlalchemy.orm import Session
 
 from mis_finanzas.api.common import commit_or_409, get_or_404
 from mis_finanzas.api.deps import SessionDep
-from mis_finanzas.api.schemas import CategoryIn, CategoryOut, RuleIn, RuleOut
+from mis_finanzas.api.schemas import (
+    CategoryIn,
+    CategoryOut,
+    RuleIn,
+    RuleOut,
+    RulePreviewOut,
+    RuleSuggestionOut,
+)
 from mis_finanzas.ledger.categorize import apply_rules_to_uncategorized
-from mis_finanzas.ledger.models import Category, CategoryRule
+from mis_finanzas.ledger.models import AmountSign, Category, CategoryRule, MatchType
 from mis_finanzas.ledger.rules import validate_pattern
+from mis_finanzas.reports.rule_suggestions import DEFAULT_LIMIT, preview_rule, suggest_rules
 
 router = APIRouter(tags=["categories"])
 
@@ -82,3 +90,40 @@ def delete_rule(rule_id: int, session: SessionDep) -> None:
 def apply_rules(session: SessionDep) -> dict[str, int]:
     """Categorize every uncategorized, non-transfer transaction with the current rules."""
     return {"categorized": apply_rules_to_uncategorized(session)}
+
+
+@router.get("/rules/suggestions", response_model=list[RuleSuggestionOut])
+def rule_suggestions(session: SessionDep, limit: int = DEFAULT_LIMIT) -> list[RuleSuggestionOut]:
+    """Uncategorized movements grouped by merchant, with the rule that would catch each group."""
+    return [
+        RuleSuggestionOut(
+            pattern=s.pattern,
+            example=s.example,
+            sign=s.sign,
+            count=s.count,
+            first_date=s.first_date,
+            last_date=s.last_date,
+            accounts=s.accounts,
+            total_ars=s.total_ars,
+            missing_rate=s.missing_rate,
+            would_categorize=s.preview.would_categorize,
+            conflicts=s.preview.conflicts,
+        )
+        for s in suggest_rules(session, max(1, min(limit, 200)))
+    ]
+
+
+@router.get("/rules/preview", response_model=RulePreviewOut)
+def rule_preview(
+    pattern: str,
+    session: SessionDep,
+    match_type: MatchType = MatchType.CONTAINS,
+    sign: AmountSign = AmountSign.ANY,
+) -> RulePreviewOut:
+    """What a rule with this pattern would catch, before creating it."""
+    try:
+        validate_pattern(pattern, match_type)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    found = preview_rule(session, pattern, match_type, sign)
+    return RulePreviewOut(would_categorize=found.would_categorize, conflicts=found.conflicts)
