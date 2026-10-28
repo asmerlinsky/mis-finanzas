@@ -3,6 +3,9 @@
 Money that leaves one account and arrives in another (bank -> broker, bank -> card payment)
 is neither income nor expense. Candidates are pairs with opposite amounts in the same
 currency, in different accounts, at most `MAX_DAYS_APART` days apart.
+
+Not supported: paying a card's USD balance in pesos. The bank row is ARS and the card row is
+USD, so they never pair, and both sides count in totals until linked or recategorized by hand.
 """
 
 from collections.abc import Sequence
