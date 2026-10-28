@@ -18,6 +18,7 @@ import type {
   MonotributoStatus,
   Portfolio,
   Rule,
+  RuleSuggestion,
   SourceAccount,
   TransactionFilters,
   TransactionPage,
@@ -31,6 +32,12 @@ export const useCategories = () =>
   useQuery({ queryKey: ['categories'], queryFn: () => api<Category[]>('/categories') })
 
 export const useRules = () => useQuery({ queryKey: ['rules'], queryFn: () => api<Rule[]>('/rules') })
+
+export const useRuleSuggestions = () =>
+  useQuery({
+    queryKey: ['rule-suggestions'],
+    queryFn: () => api<RuleSuggestion[]>('/rules/suggestions'),
+  })
 
 export const useMappings = () =>
   useQuery({ queryKey: ['mappings'], queryFn: () => api<Mapping[]>('/mappings') })
