@@ -28,7 +28,8 @@ keeps the original layout, with random digits and coded or masked names.
 | Topic | Decision |
 |---|---|
 | Santander accounts | One app account per column and currency: CA pesos, CC pesos, CA dólares. CC only when used. |
-| Visa | **Closed statement PDF only.** No parser for the "Últimos consumos" xlsx; no import of the card section inside the account statement. |
+| Visa | The closed statement PDF, **or** the Visa section inside the account statement (since 2026-10-28), so one PDF a month covers bank and card. Both use the same targets and dedupe. No parser for the "Últimos consumos" xlsx. |
+| American Express | Santander's Amex statement, in both layouts it has used (2026-10-28). The account statement doesn't include it. |
 | Mercado Pago | The "resumen de cuenta" CSV (`samples/resumen-cuenta-mp.redacted.csv`), not the settlement report. |
 | Balanz | Two inputs: the **movements** statement ("Cuenta Corriente por Concertación") and the **holdings** statement ("Posición consolidada"). |
 | Balanz tables | Read data **only from rows under the full table header row**. Coded words (`ESPECIE_##`, `DESCRIPCION_##`) elsewhere on the page are never data. |
@@ -485,21 +486,90 @@ Notes from implementing it:
 - Checked in headless Chrome with synthetic files: import the export, attach a PDF, pick a
   category; then the over-the-cap warning, the next recategorization, the monthly chart and
   the invoice list with its PDF link. Light and dark mode.
-- **To confirm on real data:** import the real export (every row must pass the total check),
-  attach one real PDF (every check must pass), and compare the last-12-months total with
-  ARCA's own "Monotributo" summary.
+- Confirmed on real data (2026-10-28): the owner's real invoice passed its checks.
+- **Still to compare:** the last-12-months total against ARCA's own "Monotributo" summary.
 - Factura C PDFs are not in a sample; they are read by the same labels and may need a fix.
 
-## Phase 7 — Home server readiness (M)
+## Phase 7 — Home server readiness (M) — done
 
-- [ ] **Single-user login:**
+- [x] **Single-user login:**
   - argon2 password hash in the data dir, session cookie, every `/api` route protected.
   - Binding to anything other than `127.0.0.1` is refused unless login is configured.
-- [ ] **Docker:** a multi-stage `Dockerfile` (node build → python runtime), and `compose.yaml`
+- [x] **Docker:** a multi-stage `Dockerfile` (node build → python runtime), and `compose.yaml`
   with the data dir as a volume and a healthcheck.
-- [ ] **Backups:** a nightly `sqlite3 .backup` plus `uploads/`, copied to a configurable folder.
-- [ ] **Docs:** reach the server over Tailscale or WireGuard, never through router port
+- [x] **Backups:** a nightly `sqlite3 .backup` plus `uploads/`, copied to a configurable folder.
+- [x] **Docs:** reach the server over Tailscale or WireGuard, never through router port
   forwarding.
+
+Notes from implementing it:
+- Login: `auth/service.py`.
+  - The argon2 hash lives in `auth.json`.
+  - Sessions are stored as the sha256 of the token, and last 30 days.
+  - `LoginThrottle`: 5 failures in 15 minutes lock logins.
+  - The cookie is HttpOnly and SameSite=Strict, and Secure when `MIS_FINANZAS_COOKIE_SECURE`
+    is set.
+  - `mis-finanzas-password` (`just password`) sets the password and ends every session.
+- `__main__.py` exits with code 2 when listening beyond localhost without a password. Checked
+  on a real process.
+- Backups: `core/backup.py`. It runs once a day (checked hourly) when
+  `MIS_FINANZAS_BACKUP_DIR` is set, or on demand with `just backup`. Each day gets a SQLite
+  online-backup copy, keeping the last N; each upload is copied once.
+- Docker:
+  - `Dockerfile`: node, then python + uv; non-root UID 1000; healthcheck on `/api/health`.
+  - `compose.yaml`: port on 127.0.0.1 only, `data/` and `backups/` volumes.
+  - `.dockerignore` is an allowlist.
+  - Guide: `docs/home-server.md`. Use Tailscale `serve`; never port forwarding or `funnel`.
+- Checked in headless Chrome: wrong password, login, logout. The API answers 401 without a
+  session, and the backup ran at startup.
+- **Not verified yet:** the Docker image build and `compose up`. Docker Desktop's engine was
+  not running here.
+
+## Follow-up — Card statements (S) — done
+
+- [x] **Visa from the account statement:** `santander/account_card.py` reads the section from the
+  big "Visa crédito" heading to the next product heading. The debit card and payments pages
+  after it repeat account movements and are not read. Rows go to `santander/visa/ARS|USD`, so
+  importing the Visa PDF too adds nothing twice (tested). Its checks are prefixed "Visa:".
+- [x] **One card reader:** `santander/card_statement.py` holds the Visa importer's logic,
+  configured by a `CardLayout` (titles, labels, closing lines). Every earlier sample parses
+  identically after the move, and so does the account statement's bank part.
+- [x] **American Express, new layout** (`santander_amex_pdf`): the Visa design, titled
+  "Resumen American Express".
+  - A month with no purchases has no card table.
+  - A month with no payments section prints no opening balance. Usually nothing was owed,
+    but a balance can carry over unprinted. The owner's first statement in this layout carried
+    July's credit, after a refund, and its `Total a pagar` didn't add up from its own lines
+    (confirmed on the real files). So without a printed opening balance:
+    - `Total a pagar` is not checked, but still required;
+    - the card subtotals are still checked;
+    - the preview shows "saldo anterior (no impreso)" = `Total a pagar` − everything read, to
+      compare with the previous statement's closing balance.
+- [x] **American Express, old layout** (`santander_amex_legacy_pdf`):
+  - one `Fecha · Comprobante · Referencia · $ · U$S` table;
+  - dates print year first (`25 Junio 28`), and following rows print only the day;
+  - the voucher number follows the date;
+  - credits carry a trailing minus;
+  - a line of underscores starts the card's purchases, which end in `Tarjeta NNNN Total
+    Consumos de …`; that total is checked;
+  - the legal text inside the table area is skipped, because only lines holding an amount by
+    itself in `$`/`U$S` are rows;
+  - check: saldo anterior + movements = `SALDO ACTUAL`.
+- `pdf_layout`: a symbol-only label (`$`) now matches its exact text.
+- Found on real account statements (sample `resumen-cuenta-visa-enero`): a month paid in
+  excess closes its payments with `Total -$ …`. That line wasn't recognized, became a row
+  error, and its check was skipped. Negative totals are now recognized, and a payments section
+  whose closing line isn't found fails its check instead of skipping it.
+- **Samples:**
+  - `resumen-amex-junio` (old, no purchases) and `resumen-amex-julio` (old, a refund): the
+    redaction scrambled their `25 Junio 28` dates, because the redaction tool doesn't recognize
+    them. Their rows could only be checked with patched dates.
+  - `resumen-amex-octubre` (new, payments only) and `resumen-amex-agosto` (new, a purchase, no
+    payments section) read with no errors.
+- Confirmed on real files (2026-10-28):
+  - account statements with their Visa section, after the `Total -$` fix;
+  - the new-layout August Amex, after the unprinted-opening-balance change;
+  - the old-layout July Amex: its dates read correctly in the import preview, so the year-first
+    order is right.
 
 ## Verification (per phase)
 

@@ -35,6 +35,9 @@ just format
 just redact <file> --name "…"   # redacted sample of a statement into samples/ (xlsx/csv/pdf)
 just preview samples/x.redacted.json   # render a PDF words sample back to a PDF
 just sample-check               # run every importer over samples/: counts and checks only
+just password                   # set the login password (required to listen beyond localhost)
+just backup [folder]            # back up the DB and uploads now (default MIS_FINANZAS_BACKUP_DIR)
+docker compose up -d --build    # home server; setup in docs/home-server.md
 # Sample digits are random, so value checks fail on samples. To verify checks, run the
 # recipe on a folder of real statements: it prints counts and pass/fail only.
 cd backend && uv run python -m mis_finanzas.tools.sample_check <folder>
@@ -48,8 +51,12 @@ Node comes from `n` (`/usr/local/bin/node`, v22). The apt `/usr/bin/node` v12 is
 The backend is `backend/src/mis_finanzas/`: FastAPI + SQLAlchemy 2.1 + SQLite, Python 3.12, uv.
 Dependencies point one way:
 `api → importers/reports → investments/monotributo → ledger/market → core`.
-- `core/`: settings (`MIS_FINANZAS_*` env vars), engine/session, money helpers, logging, and
-  the Alembic runner.
+- `core/`: settings (`MIS_FINANZAS_*` env vars), engine/session, money helpers, logging, the
+  Alembic runner, and the daily backup (`backup.py`).
+- `auth/`: single-user login. The password's argon2 hash is in `<data_dir>/auth.json`;
+  sessions are server-side, stored as token hashes. `api/auth_guard.py` makes every `/api`
+  route except health and `/api/auth/*` need a session once a password exists, and
+  `__main__.py` refuses to listen beyond localhost without one.
 - `ledger/`: models and the pure bookkeeping logic:
   - rule matching (`rules.py`);
   - fingerprints (`dedup.py`);
@@ -65,6 +72,8 @@ Dependencies point one way:
     commit: it means the layout was misread.
   - Importers live in a package per institution (`importers/santander/`) and are registered
     in `importers/catalog.py`.
+  - Santander card statements (Visa, Amex, and the Visa section of the account statement)
+    share one reader, `santander/card_statement.py`, configured by a `CardLayout`.
   - PDF importers work on `PageWords` (`pdf_words.py`), so they also run on the redacted JSON
     samples. Use `pdf_layout.py` to read tables: header rows need **all** labels, so data is
     only read under the right table.
@@ -122,7 +131,9 @@ The frontend is `frontend/`: React 19 + Vite + TypeScript, TanStack Query, Recha
 The data dir defaults to `~/.local/share/mis-finanzas`. It holds the SQLite DB and the original
 uploads, and it is never inside the repo. `.gitignore` also blocks `samples/`, `*.db` and `.env`.
 Test fixtures are synthetic. Never commit real statements, or values copied from them. Log
-messages carry ids and counts, never descriptions or amounts.
+messages carry ids and counts, never descriptions or amounts. Backups copy the DB and uploads,
+never `auth.json`. The Docker build context is an allowlist (`.dockerignore`), so `samples/`
+and data folders can't enter an image.
 
 ## Rules in `.claude/`
 

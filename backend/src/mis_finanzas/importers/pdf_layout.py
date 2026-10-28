@@ -40,7 +40,8 @@ _AMOUNT_WORD = re.compile(r"^-?\d[\d.]*,\d+$")
 
 
 def _token(text: str) -> str:
-    return _NOT_WORD.sub("", normalize_description(text))
+    """Case, accents and punctuation ignored; a symbol-only word (`$`) is kept as printed."""
+    return _NOT_WORD.sub("", normalize_description(text)) or text.strip()
 
 
 @dataclass(frozen=True)
@@ -192,13 +193,14 @@ def chunks(line: Line, gap: float = CHUNK_GAP) -> list[list[Word]]:
     return groups
 
 
-def _cells(line: Line, header: HeaderRow) -> dict[str, str]:
-    cells: dict[str, list[str]] = {}
+def line_cells(line: Line, header: HeaderRow) -> dict[str, str]:
+    """A line's values by column label, for tables read line by line."""
+    found: dict[str, list[str]] = {}
     for chunk in chunks(line):
         column = header.column_of(chunk[0].x0, chunk[-1].x1)
         if column is not None:
-            cells.setdefault(column.label, []).extend(w.text for w in chunk)
-    return {label: " ".join(texts) for label, texts in cells.items()}
+            found.setdefault(column.label, []).extend(w.text for w in chunk)
+    return {label: " ".join(texts) for label, texts in found.items()}
 
 
 def _extend(row: TableRow, line: Line, cells: dict[str, str]) -> None:
@@ -225,7 +227,7 @@ def table_rows(
             continue
         if stop is not None and stop(line):
             break
-        cells = _cells(line, header)
+        cells = line_cells(line, header)
         if any(cells.get(key) for key in key_columns):
             rows.append(TableRow(top=line.top, cells=dict(cells), lines=[line]))
         elif rows:
