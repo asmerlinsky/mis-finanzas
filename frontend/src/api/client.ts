@@ -22,8 +22,14 @@ async function errorMessage(response: Response): Promise<string> {
   return response.statusText || `HTTP ${response.status}`
 }
 
+/** Fired when the server asks for a login, so the app can show the login screen. */
+export const UNAUTHORIZED_EVENT = 'mis-finanzas:unauthorized'
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, init)
+  if (response.status === 401 && path !== '/auth/login') {
+    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+  }
   if (!response.ok) {
     throw new ApiError(response.status, await errorMessage(response))
   }

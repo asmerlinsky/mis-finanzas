@@ -1,0 +1,18 @@
+# Home server: see docs/home-server.md.
+services:
+  app:
+    build: .
+    image: mis-finanzas
+    restart: unless-stopped
+    # Only this machine can reach the port; other devices come in through Tailscale
+    # (`tailscale serve`), never through a port opened on the router.
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/data
+      - ${MIS_FINANZAS_BACKUP_PATH:-./backups}:/backups
+    environment:
+      MIS_FINANZAS_BACKUP_DIR: /backups
+      MIS_FINANZAS_BACKUP_KEEP_DAYS: "14"
+      # The session cookie is only sent over HTTPS, as `tailscale serve` provides.
+      MIS_FINANZAS_COOKIE_SECURE: "true"

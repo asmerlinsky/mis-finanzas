@@ -1,5 +1,6 @@
 # Personal data never enters the repo
 data/
+backups/
 samples/
 # Statements downloaded into the repo root
 /*.pdf

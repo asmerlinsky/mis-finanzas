@@ -309,3 +309,12 @@ class InvoiceOut(BaseModel):
 
 class ProfileIn(BaseModel):
     category: str
+
+
+class LoginIn(BaseModel):
+    password: str
+
+
+class AuthStatusOut(BaseModel):
+    required: bool  # a password is set
+    authenticated: bool  # this browser may use the API

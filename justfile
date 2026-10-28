@@ -60,6 +60,14 @@ sample-check:
 preview sample:
     uv run --project {{backend}} python -m mis_finanzas.tools.render_sample "{{sample}}"
 
+# Set or change the login password (needed before listening beyond localhost)
+password:
+    cd {{backend}} && uv run mis-finanzas-password
+
+# Back up the database and uploaded originals now: just backup [folder]
+backup *folder:
+    cd {{backend}} && uv run python -m mis_finanzas.tools.backup {{folder}}
+
 # Lint only
 lint:
     cd {{backend}} && uv run ruff check src tests
