@@ -22,11 +22,11 @@ class Row:
     bold: bool = False
 
 
-def _ops(rows: Sequence[Row]) -> list[TextOp]:
+def _ops(rows: Sequence[Row], height: float = PAGE_HEIGHT) -> list[TextOp]:
     return [
         TextOp(
             x=x,
-            y=PAGE_HEIGHT - row.top - ASCENT * row.size,
+            y=height - row.top - ASCENT * row.size,
             text=text,
             size=row.size,
             bold=row.bold,
@@ -36,8 +36,10 @@ def _ops(rows: Sequence[Row]) -> list[TextOp]:
     ]
 
 
-def statement_pdf(pages: Sequence[Sequence[Row]]) -> bytes:
-    return build_pdf([Page(PAGE_WIDTH, PAGE_HEIGHT, _ops(rows)) for rows in pages])
+def statement_pdf(
+    pages: Sequence[Sequence[Row]], width: float = PAGE_WIDTH, height: float = PAGE_HEIGHT
+) -> bytes:
+    return build_pdf([Page(width, height, _ops(rows, height)) for rows in pages])
 
 
 def header(top: float, labels: Sequence[tuple[float, str]]) -> Row:

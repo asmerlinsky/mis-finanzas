@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from mis_finanzas.market.fx import RateTable, rate_status
 from mis_finanzas.market.http import DisallowedHostError, PublicHttpClient
 from mis_finanzas.market.models import FetchLog, FxRate, RateType
-from mis_finanzas.market.refresh import refresh_rates
+from mis_finanzas.market.prices import Data912PanelsSource, latest_prices
+from mis_finanzas.market.refresh import refresh_prices, refresh_rates
 from mis_finanzas.market.sources import ArgentinaDatosMepSource
 
 ALLOWED = ["api.argentinadatos.com"]
@@ -111,3 +112,44 @@ def test_rate_status_staleness(session: Session) -> None:
     session.commit()
     assert not rate_status(session, date(2026, 3, 9)).stale
     assert rate_status(session, date(2026, 3, 11)).stale
+
+
+PANELS = {
+    "arg_cedears": [
+        {"symbol": "EJM", "c": 1500.5, "px_bid": 1500},
+        {"symbol": "NOTRADE", "c": 0},
+        {"symbol": "BROKEN"},
+    ],
+    "arg_stocks": [{"symbol": "DOS", "c": 1100}],
+    "arg_bonds": [{"symbol": "BON1", "c": 82.25}],
+    "arg_corp": [{"symbol": "EJM", "c": 9}],  # also listed elsewhere: the first panel wins
+}
+
+
+class PanelHandler:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.calls.append(str(request.url))
+        return httpx.Response(200, content=json.dumps(PANELS[request.url.path.rsplit("/", 1)[1]]))
+
+
+def test_price_panels_are_downloaded_whole_at_most_once_a_day(session: Session) -> None:
+    calls: list[str] = []
+    client = PublicHttpClient(
+        ["data912.com"], 1, transport=httpx.MockTransport(PanelHandler(calls))
+    )
+    source = Data912PanelsSource()
+    first = refresh_prices(session, client, source, date(2026, 3, 3))
+    second = refresh_prices(session, client, source, date(2026, 3, 3))
+    assert (first.status, first.rows, second.status) == ("ok", 3, "skipped")
+    # Only the four whole panels are ever requested; never one ticker.
+    assert calls == [f"https://data912.com/live/{panel}" for panel in source.panels]
+    prices = latest_prices(session, {"EJM", "DOS", "BON1", "NOTRADE"}, date(2026, 3, 3))
+    assert {s: p.price for s, p in prices.items()} == {
+        "EJM": Decimal("1500.5"),
+        "DOS": Decimal(1100),
+        "BON1": Decimal("82.25"),
+    }
+    assert latest_prices(session, {"EJM"}, date(2026, 3, 2)) == {}

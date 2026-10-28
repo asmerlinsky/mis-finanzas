@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 
+from mis_finanzas.investments.records import InvestmentData
+
 # The single target of a generic (column-mapping) import: its mapping names the account.
 DEFAULT_TARGET = "default"
 
@@ -32,16 +34,18 @@ class RowError:
 class Check:
     """A total the statement states (`expected`) against what was parsed (`actual`).
 
-    A failed check means the layout was misread, so it blocks the import.
+    A failed check means the layout was misread, so it blocks the import. `tolerance` is for
+    totals of values the statement itself prints rounded.
     """
 
     name: str
     expected: Decimal
     actual: Decimal
+    tolerance: Decimal = Decimal(0)
 
     @property
     def ok(self) -> bool:
-        return self.expected == self.actual
+        return abs(self.expected - self.actual) <= self.tolerance
 
 
 @dataclass
@@ -50,6 +54,8 @@ class ParseResult:
     errors: list[RowError] = field(default_factory=list)
     checks: list[Check] = field(default_factory=list)
     metadata: dict[str, str] = field(default_factory=dict)
+    # Broker statements: operations and holdings, stored next to the ledger rows.
+    investments: InvestmentData | None = None
 
     @property
     def failed_checks(self) -> list[Check]:

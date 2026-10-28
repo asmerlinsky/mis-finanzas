@@ -3,7 +3,7 @@
 
 import { useState } from 'react'
 
-import type { Account, Currency, Preview, PreviewRow, StatementCheck } from '../../api/types'
+import type { Account, Currency, InvestmentSummary, Preview, PreviewRow, StatementCheck } from '../../api/types'
 import { Money } from '../../components/ui'
 import { formatDate, KIND_LABELS } from '../../lib/format'
 import { blockers, DEFAULT_TARGET, importerLabel, suggestedAccount, targetCurrency } from '../../lib/importers'
@@ -87,6 +87,24 @@ function Targets({ preview, accounts, onMap, onCreate }: Pick<Props, 'preview' |
         })}
       </tbody>
     </table>
+  )
+}
+
+/** A broker statement's positions and operations, stored along with its movements. */
+function Investments({ summary }: { summary: InvestmentSummary | null }) {
+  if (!summary) return null
+  const date = summary.as_of ? ` al ${formatDate(summary.as_of)}` : ''
+  const holdings = summary.source === 'tenencias'
+  return (
+    <p>
+      {holdings ? 'Tenencias' : 'Instrumentos'}
+      {date}: <strong>{summary.positions}</strong> posiciones
+      {summary.cash > 0 && `, ${summary.cash} saldos en monedas`}
+      {summary.operations > 0 && `, ${summary.operations} operaciones (${summary.new_operations} nuevas)`}.
+      {summary.replaces_snapshot && (
+        <span className="muted"> Reemplaza lo importado antes para esa fecha.</span>
+      )}
+    </p>
   )
 }
 
@@ -190,13 +208,16 @@ export function ImportPreview({ preview, accounts, busy, onMap, onCreate, onComm
       </p>
       <Checks checks={preview.checks} />
       <Targets preview={preview} accounts={accounts} onMap={onMap} onCreate={onCreate} />
-      <p>
-        <strong>{preview.new_count}</strong> movimientos nuevos, {preview.duplicate_count} ya
-        importados
-        {preview.near_duplicate_count > 0 &&
-          `, ${preview.near_duplicate_count} posibles duplicados (destildalos para no importarlos)`}
-        .
-      </p>
+      <Investments summary={preview.investments} />
+      {preview.rows.length > 0 && (
+        <p>
+          <strong>{preview.new_count}</strong> movimientos nuevos, {preview.duplicate_count} ya
+          importados
+          {preview.near_duplicate_count > 0 &&
+            `, ${preview.near_duplicate_count} posibles duplicados (destildalos para no importarlos)`}
+          .
+        </p>
+      )}
       <Errors preview={preview} />
       {preview.errors.length > 0 && (
         <label className="check">
@@ -215,9 +236,11 @@ export function ImportPreview({ preview, accounts, busy, onMap, onCreate, onComm
         disabled={reasons.length > 0 || busy}
         onClick={() => onCommit({ skipLines: [...skipped], skipInvalid })}
       >
-        Importar {importable} movimientos
+        {preview.rows.length === 0 && preview.investments ? 'Importar tenencias' : `Importar ${importable} movimientos`}
       </button>
-      <Rows preview={preview} accounts={accounts} skipped={skipped} toggle={toggle} />
+      {preview.rows.length > 0 && (
+        <Rows preview={preview} accounts={accounts} skipped={skipped} toggle={toggle} />
+      )}
     </div>
   )
 }

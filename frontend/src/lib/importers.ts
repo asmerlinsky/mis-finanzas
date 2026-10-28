@@ -8,6 +8,8 @@ const IMPORTER_LABELS: Record<string, string> = {
   santander_account_pdf: 'Santander · resumen de cuenta (PDF)',
   santander_visa_pdf: 'Santander · resumen Visa (PDF)',
   mercadopago_account_csv: 'Mercado Pago · resumen de cuenta (CSV)',
+  balanz_movements_pdf: 'Balanz · cuenta corriente (PDF)',
+  balanz_holdings_pdf: 'Balanz · posición consolidada (PDF)',
 }
 
 const INSTITUTIONS: Record<string, string> = {
@@ -16,7 +18,7 @@ const INSTITUTIONS: Record<string, string> = {
   balanz: 'Balanz',
 }
 
-const PRODUCTS: Record<string, string> = { CA: 'CA', CC: 'CC', visa: 'Visa' }
+const PRODUCTS: Record<string, string> = { CA: 'CA', CC: 'CC', visa: 'Visa', MEP: 'MEP', CABLE: 'cable' }
 
 export const DEFAULT_TARGET = 'default'
 
@@ -63,6 +65,7 @@ export function blockers(preview: Preview, skipInvalid: boolean, importable: num
     reasons.push('Elegí una cuenta para cada parte del resumen.')
   }
   if (preview.errors.length > 0 && !skipInvalid) reasons.push('Hay filas con errores.')
-  if (importable === 0) reasons.push('No hay movimientos nuevos para importar.')
+  // A broker statement always has investment data to store, even with no new movements.
+  if (importable === 0 && !preview.investments) reasons.push('No hay movimientos nuevos para importar.')
   return reasons
 }

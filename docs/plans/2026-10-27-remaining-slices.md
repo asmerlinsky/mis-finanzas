@@ -149,10 +149,17 @@ Each parser lives in `importers/santander/` with a synthetic fixture test and a 
   - Leave out `Saldo anterior` rows.
   - Inspect pages 3–5 for taxes and interest sections, and include them as movements.
   - Check: Σ per currency against the statement's totals.
-- [ ] (Open) Transfer pairing needs no change. A card payment from the bank (`Pago de tarjeta de
-  credito`) and `Su pago en pesos` on `visa/ARS` pair if they're within 3 days of each other.
-  Measure the gap on real data, and widen the window to 7 days for card accounts only if
-  needed.
+- [x] Transfer pairing needs no change. The bank pays the card from each account in its own
+  currency, so a card payment is two transfers:
+  - `Pago de tarjeta de credito` on CA pesos ↔ `Su pago en pesos` on `visa/ARS`;
+  - `Pago de tarjeta de credito` on CA dólares ↔ `Su pago en usd` on `visa/USD`.
+  Both pair within the 3-day window: the owner confirmed the Visa payment date equals the bank
+  debit date. Each statement's payments settle the previous statement, so they pair with the
+  previous month's debits.
+- [ ] **Not supported:** paying the card's USD balance in pesos. The bank side is ARS and the
+  card side USD, so the currency check never pairs them, and both count in totals (an expense
+  and an income) until fixed by hand. The owner pays each part from the account in its own
+  currency, so this is left out on purpose.
 
 Notes from implementing it:
 - The importers live in `importers/santander/` and are registered in `importers/catalog.py`.
@@ -163,8 +170,7 @@ Notes from implementing it:
   Value checks fail there only because sample digits are random.
 - **Verify on real files locally:** `just sample-check <folder with the real statements>`. It
   prints only counts and check results, never content.
-- The Visa statement prints no date on payment rows; they take the `Saldo anterior` row's date.
-  The pairing window question stays open until it's measured on real data.
+- A Visa row with no date of its own takes the date of the row above it.
 
 ## Phase 3 — Mercado Pago (S) — done
 
@@ -206,55 +212,201 @@ Notes from implementing it:
 - Checked in headless Chrome with a synthetic Santander statement: detect, all checks green,
   blocked until mapped, create accounts, import 4 rows, mappings on Accounts, re-upload blocked.
 
-## Phase 5 — Investments (Balanz) (L)
+## Phase 5 — Investments (Balanz) (L) — done
 
-New package `investments/`, importing `core` and `ledger` (for the broker cash accounts).
+New package `investments/`, importing `core`, `ledger` and `market`. Importers import its
+record types; it imports nothing from `importers`. Split in two steps, because valuation is
+only worth building on parsers verified against real statements:
+- **5a — data in:** models, both parsers, the import flow, the preview.
+- **5b — valuation:** daily prices, valuation, the "Inversiones" page.
 
-- [ ] **Model and migration:**
-  - `Instrument(ticker, name, asset_class, broker_code)`;
-  - `Operation(account, instrument, kind, trade_date, settle_date, quantity, price, gross,
-    fees, net, currency, reference)`, where kind is compra, venta, dividendo, renta,
-    amortización, suscripción, rescate or otro;
-  - `HoldingSnapshot(account, as_of)`, with `Position(instrument, quantity, price, value)` and
-    `CashBalance(currency, amount)`;
-  - `InstrumentPrice(ticker, date, price, source)`.
-- [ ] **`balanz_movements_pdf`:**
-  - For each page, take the header row containing all 12 labels, so the column x positions
-    are read from that page. Rows are read only below that header.
-  - A bold title line starts a section: an instrument (`… - TICKER code`) or a currency
-    (`Pesos`, `Dólar MEP`, `Dólares …`).
-  - Instrument sections give operations plus `Saldo al` quantities. **Check:**
-    `Saldo Anterior` + Σ quantities = `Saldo al`.
-  - Currency sections give cash rows. They become ledger transactions on the broker cash
-    accounts (targets `balanz/ARS`, `balanz/USD-MEP`, `balanz/USD-CABLE`): a dividend is
-    income, a buy or sell is `investment`, and a fee is part of `net`.
-  - Everything outside a section and its header (page header, `Comitente`, legal footer) is
-    ignored, **including coded words**.
-- [ ] **`balanz_holdings_pdf`:**
-  - Only rows under a header row containing all of `Especie · Descripción · Cantidad · Garantía
-    · Precio · Valor Actual`.
-  - The asset class is the section title above (`Acciones`, `Cedears`, …).
-  - Cash comes from the page-1 `Monedas` block.
-  - **Check:** Σ `Valor Actual` per class = the page-1 class totals.
-- [ ] **Daily prices:**
+What the samples show, beyond the table in "What the samples show":
+- Movements:
+  - Two groups, each under its own heading above the header row: `Instrumentos` and
+    `Monedas`. A group and its last section carry over to the next page, which starts with a
+    header row and no title.
+  - The header has `Impor. IVA` **twice** (IVA on the fee, IVA on the market rights), so
+    header matching must accept a repeated label.
+  - Instrument quantities are in `Cant. VN`; cash balances are in `Neto`.
+  - `Saldo al <date>` lines are running balances after each day; the last one closes the
+    section.
+  - A CEDEAR dividend shows twice: the amount, positive, in the dollar section; its fees,
+    negative, in `Pesos`.
+- Holdings:
+  - Page 1 prints two side-by-side columns: class totals under `Instrumentos` and currency
+    totals under `Monedas`.
+  - `Valor Actual` is in whole pesos.
+- data912: `/live/arg_cedears`, `/live/arg_stocks`, `/live/arg_bonds` and `/live/arg_corp`
+  return whole panels with `symbol` and last price `c`. Bonds are quoted per 100 nominal;
+  the `D` / `C` suffixes are the MEP / cable lines.
+
+### 5a — data in — done
+
+- [x] **`pdf_layout`:** a label listed twice matches its second occurrence, as column
+  `Impor. IVA (2)`.
+- [x] **Model and migration:**
+  - `Instrument(ticker unique, name, asset_class, broker_code)`.
+  - `InvestmentOperation(instrument, trade_date, settle_date, description, quantity, price,
+    gross, fees, net, fingerprint unique, import_batch)`. Its amounts are decimals as
+    printed, because the instrument section doesn't name the currency.
+  - `HoldingSnapshot(broker, as_of, source, import_batch)`, unique on `(broker, as_of,
+    source)`. `source` is `tenencias` (holdings) or `movimientos` (the closing quantities of
+    a movements statement). A later file for the same key replaces the snapshot.
+  - `HoldingPosition(snapshot, instrument, quantity, price, value, currency)`. Price and value
+    are empty in `movimientos` snapshots.
+  - `HoldingCash(snapshot, label, currency, amount)`.
+  - Seed a `Dividendos` income category with the rule `DIVIDENDO`. CEDEAR dividend fees in
+    pesos then reduce dividend income instead of counting as expenses.
+- [x] **`balanz_movements_pdf`:**
+  - Detect by the title `Cuenta Corriente por Concertación` and the 12-label header.
+  - Read rows only under a header row. Stop at a heading (bigger text) or the legal footer.
+    A bold row that has only a description is a section title.
+  - `Monedas` sections become ledger rows, dated `Fecha Co.` (the statement's balances run
+    by trade date), with amount `Neto`. Targets:
+    - `Pesos` → `balanz/ARS`;
+    - `Dólar MEP` → `balanz/MEP/USD`;
+    - any other `Dólar…` section → `balanz/<rest of title>/USD`.
+  - `Instrumentos` sections become operations: title `<name> - <TICKER> <code>`, quantity
+    from `Cant. VN`, fees = the four fee columns.
+  - The closing quantity of each instrument becomes a `movimientos` snapshot at the period
+    end.
+  - **Checks:**
+    - every section has `Saldo Anterior` and a final `Saldo al`;
+    - each `Saldo al` equals the running balance, for cash and for quantities.
+- [x] **`balanz_holdings_pdf`:**
+  - Detect by `Posición consolidada` and the 6-label header.
+  - Asset class = the heading above each header row.
+  - `as_of` = `Fecha resumen`; the page-1 `Cuenta` field (a name) is never read.
+  - Cash comes from page 1, `Monedas` column.
+  - **Check:** Σ `Valor Actual` per class = the page-1 class total, within 1 peso per row,
+    because each value is rounded.
+- [x] **Import flow:**
+  - `ParseResult.investments` carries the records.
+  - The preview shows positions, cash lines and new operations.
+  - The commit stores them in the same transaction as the ledger rows.
+  - A holdings file has no ledger rows, and can still be committed.
+  - Operations dedupe by fingerprint (broker, ticker, trade date, quantity, net, occurrence).
+- [x] **`sample_check`** also reports positions, cash lines and operations, as counts only.
+
+**Trades (verified on two more samples, `resumen_balanz_febrero` / `_junio`, and on the
+real statements: no row errors, every check passes):**
+- A trade prints `Boleto / <n> / COMPRA / <n> / <TICKER> / <usd|$>` in the instrument section
+  (quantity, price with 10 decimals, gross, fees, net) and again in each currency section it
+  moves (cash). Funds print `Liquidación de Suscripción / …` and `Transferencia a … de FCI`.
+- An instrument's intermediate `Saldo al <date>` may print with no quantity; it is skipped.
+- Long amounts in adjacent columns print with no gap and extract as one word
+  (`145.769,874432,25`). The movements parser splits them back (2 decimals, or 10 for a
+  price), and `pdf_layout.chunks` never joins two amounts into one cell.
+- Values start where their column's label starts and overrun toward the next label, so a
+  value overlapping two labels about equally went to the wrong one. `pdf_layout` now gives a
+  value to the label it starts in. Every earlier sample parses identically after the change.
+- Migration 0007 seeds `Inversiones` (kind `investment`) with anchored regex rules for
+  `Boleto / n / COMPRA|VENTA` and `Liquidación de Suscripción|Rescate`, so trades don't count
+  as expenses. `VENTA` and `Rescate` are not in a sample yet.
+
+### 5a — data in — done
+
+- [x] **`pdf_layout`:** a label listed twice matches its second occurrence, as column
+  `Impor. IVA (2)`.
+- [x] **Model and migration:**
+  - `Instrument(ticker unique, name, asset_class, broker_code)`.
+  - `InvestmentOperation(instrument, trade_date, settle_date, description, quantity, price,
+    gross, fees, net, fingerprint unique, import_batch)`. Its amounts are decimals as
+    printed, because the instrument section doesn't name the currency.
+  - `HoldingSnapshot(broker, as_of, source, import_batch)`, unique on `(broker, as_of,
+    source)`. `source` is `tenencias` (holdings) or `movimientos` (the closing quantities of
+    a movements statement). A later file for the same key replaces the snapshot.
+  - `HoldingPosition(snapshot, instrument, quantity, price, value, currency)`. Price and value
+    are empty in `movimientos` snapshots.
+  - `HoldingCash(snapshot, label, currency, amount)`.
+  - Seed a `Dividendos` income category with the rule `DIVIDENDO`. CEDEAR dividend fees in
+    pesos then reduce dividend income instead of counting as expenses.
+- [x] **`balanz_movements_pdf`:**
+  - Detect by the title `Cuenta Corriente por Concertación` and the 12-label header.
+  - Read rows only under a header row. Stop at a heading (bigger text) or the legal footer.
+    A bold row that has only a description is a section title.
+  - `Monedas` sections become ledger rows, dated `Fecha Co.` (the statement's balances run
+    by trade date), with amount `Neto`. Targets:
+    - `Pesos` → `balanz/ARS`;
+    - `Dólar MEP` → `balanz/MEP/USD`;
+    - any other `Dólar…` section → `balanz/<rest of title>/USD`.
+  - `Instrumentos` sections become operations: title `<name> - <TICKER> <code>`, quantity
+    from `Cant. VN`, fees = the four fee columns.
+  - The closing quantity of each instrument becomes a `movimientos` snapshot at the period
+    end.
+  - **Checks:**
+    - every section has `Saldo Anterior` and a final `Saldo al`;
+    - each `Saldo al` equals the running balance, for cash and for quantities.
+- [x] **`balanz_holdings_pdf`:**
+  - Detect by `Posición consolidada` and the 6-label header.
+  - Asset class = the heading above each header row.
+  - `as_of` = `Fecha resumen`; the page-1 `Cuenta` field (a name) is never read.
+  - Cash comes from page 1, `Monedas` column.
+  - **Check:** Σ `Valor Actual` per class = the page-1 class total, within 1 peso per row,
+    because each value is rounded.
+- [x] **Import flow:**
+  - `ParseResult.investments` carries the records.
+  - The preview shows positions, cash lines and new operations.
+  - The commit stores them in the same transaction as the ledger rows.
+  - A holdings file has no ledger rows, and can still be committed.
+  - Operations dedupe by fingerprint (broker, ticker, trade date, quantity, net, occurrence).
+- [x] **`sample_check`** also reports positions, cash lines and operations, as counts only.
+
+**Not verified:** the sample month has no buys or sells, so an operation row's wording and
+the quantity's sign are untested. The quantity checks would block a misread. Confirm on a real
+statement with a trade. Then decide on a rule that gives trade cash rows the `investment`
+kind, which until then count as expense or income.
+
+Notes from implementing it:
+- Records live in `investments/records.py`, tables in `investments/models.py`, writing in
+  `investments/store.py`. The parsers live in `importers/balanz/`.
+- `Check` gained a `tolerance`, used only by the holdings class totals.
+- On the redacted samples, both read with no row errors:
+  - movements: 22 cash rows (11 `balanz/ARS`, 11 in the dollar section) and 15 instruments;
+  - holdings: 18 positions (2 Acciones, 16 Cedears) and 3 cash lines.
+  Value checks fail there only because sample digits are random.
+- **Verify on real files locally:** `just sample-check <folder>`. It now also prints the number
+  of operations, positions and cash lines.
+- The sample's third currency section is redacted, so its target is built from its title.
+  Expect something like `balanz/CABLE/USD` on a real file.
+
+### 5b — valuation — done
+
+- [x] **Daily prices:**
   - Add `data912.com` to `public_hosts`.
-  - A `PriceSource` adapter fetches the **whole** live panels (`/live/arg_cedears`,
-    `/live/arg_stocks`, `/live/arg_bonds`) once a day and stores every row. It never requests
-    one ticker.
-  - Price history starts on the day fetching starts; earlier dates are valued only at
-    statement snapshots.
-- [ ] **Valuation and returns:**
-  - Value per day = quantity (from the latest snapshot, adjusted by later operations) ×
-    the latest price.
-  - Cost basis is the weighted average from operations.
-  - Portfolio return = change in value − net contributions, where net contributions are
-    ledger transfers into or out of the broker accounts.
+  - A `PriceSource` fetches the four whole panels once a day and stores
+    `InstrumentPrice(symbol, date, price, source)`. It never requests one ticker.
+  - Price history starts on the day fetching starts.
+- [x] **Valuation:**
+  - Quantity: the latest snapshot, plus later operations.
+  - Value: quantity × the latest price × factor. The factor comes from the latest
+    `tenencias` snapshot, `value / (quantity × price)`: about 1 for shares and CEDEARs, about
+    0.01 for bonds quoted per 100. It is 1 when there is no holdings statement.
+  - Cash comes from the latest holdings statement's currency lines. The ledger has no
+    opening balance for the broker accounts, so their rows don't add up to the cash held.
   - Everything is shown in ARS and USD MEP.
-- [ ] **UI: "Inversiones" page** with:
-  - value over time;
+- [x] **UI: "Inversiones" page:**
+  - total value with a date;
   - allocation by asset class;
-  - a positions table with quantity, price, value, cost and result;
-  - dividends received.
+  - a positions table with quantity, price, value and the snapshot it comes from;
+  - dividends received per month, from the `Dividendos` category.
+- [ ] **Later:** cost basis and returns. They need the full operations history, which only
+  builds up as statements are imported.
+
+Notes from implementing it:
+- Prices: `market/prices.py` (`Data912PanelsSource`, `upsert_prices`, `latest_prices`). The
+  daily refresh runs it after the MEP rate, through the same fetch log. Every symbol of the
+  four panels is stored, under the download day. A test checks that only the four panel URLs
+  are ever requested.
+- Valuation: `investments/valuation.py`; API `GET /api/investments/portfolio` and
+  `GET /api/investments/dividends?start&end` (net of fees, from the `Dividendos` category).
+- Each price shows where it came from: `mercado` (the panel) or `resumen` (the statement,
+  when no newer market price exists).
+- Checked in headless Chrome with the synthetic statements, in light mode, dark mode and at
+  phone width: totals, allocation, positions with their price source, cash, and dividends per
+  month.
+- **To confirm on real data:** the day after the first refresh, compare the page's total with
+  Balanz's own valuation.
 
 ## Phase 6 — Monotributo (M)
 

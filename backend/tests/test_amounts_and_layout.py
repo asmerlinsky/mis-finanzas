@@ -117,3 +117,34 @@ def test_table_rows_until_limits_the_section() -> None:
     header = find_header_rows(PAGE, ["Fecha", "Movimiento", "Caja de Ahorro", "Saldo"])[0]
     rows = table_rows(PAGE, header, key_columns=["Caja de Ahorro"], until=140)
     assert len(rows) == 1
+
+
+def test_a_label_listed_twice_matches_its_second_occurrence() -> None:
+    words = [
+        _w("Arancel", 20, 100),
+        _w("IVA", 80, 100),
+        _w("Derechos", 120, 100),
+        _w("IVA", 200, 100),
+        _w("1,00", 80, 120),
+        _w("2,00", 200, 120),
+    ]
+    page = PageWords(1, 300, 400, words)
+    [header] = find_header_rows(page, ["Arancel", "IVA", "Derechos", "IVA"])
+    assert [c.label for c in header.columns] == ["Arancel", "IVA", "Derechos", "IVA (2)"]
+    [row] = table_rows(page, header, ["IVA"])
+    assert (row.cell("IVA"), row.cell("IVA (2)")) == ("1,00", "2,00")
+    assert find_header_rows(page, ["IVA", "IVA", "IVA"]) == []
+
+
+def test_a_value_starting_inside_a_label_belongs_to_it() -> None:
+    """Overrunning toward the next label, it overlaps both about equally: where it starts wins."""
+    words = [
+        _w("IVA", 100, 100, width=40),
+        _w("Derechos", 142, 100, width=40),
+        _w("7621,17", 120, 120, width=42),  # 20pt under each label
+        _w("2807,16", 160, 120, width=28),
+    ]
+    page = PageWords(1, 300, 400, words)
+    [header] = find_header_rows(page, ["IVA", "Derechos"])
+    [row] = table_rows(page, header, ["IVA"])
+    assert (row.cell("IVA"), row.cell("Derechos")) == ("7621,17", "2807,16")

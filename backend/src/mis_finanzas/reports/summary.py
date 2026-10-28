@@ -92,6 +92,18 @@ def expenses_by_category(session: Session, start: date, end: date) -> dict[str, 
     return dict(sorted(totals.items(), key=lambda item: item[1].ars, reverse=True))
 
 
+def category_by_month(
+    session: Session, category: str, start: date, end: date
+) -> list[tuple[str, Totals]]:
+    """Net monthly total of one category (e.g. "Dividendos": dividends minus their fees)."""
+    rates = load_rate_table(session)
+    months: dict[str, Totals] = {}
+    for tx in _counted_transactions(session, start, end):
+        if tx.category is not None and tx.category.name == category:
+            months.setdefault(tx.date.strftime("%Y-%m"), Totals()).add(to_dual(tx, rates))
+    return sorted(months.items())
+
+
 def _negate(amount: DualAmount) -> DualAmount:
     return DualAmount(
         ars=None if amount.ars is None else -amount.ars,

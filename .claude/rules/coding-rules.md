@@ -13,7 +13,7 @@
 
 ## Structure
 
-- **Dependencies point one way:** `api → importers/reports → ledger/market → core`. `core/`
+- **Dependencies point one way:** `api → importers/reports → investments → ledger/market → core`. `core/`
   imports nothing from the app. `ledger/` and `market/` don't import each other. `api/` only
   translates HTTP to service calls, and the logic lives in the modules below it.
 - **Parsing is pure:** an importer turns bytes into a `ParseResult` with no database access.

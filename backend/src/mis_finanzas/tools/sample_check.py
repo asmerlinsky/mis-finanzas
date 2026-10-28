@@ -18,6 +18,7 @@ from mis_finanzas.importers import registry
 from mis_finanzas.importers.base import ImportFileError
 from mis_finanzas.importers.catalog import register_builtin_importers
 from mis_finanzas.importers.pdf_words import load_pages
+from mis_finanzas.investments.records import InvestmentData
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +53,22 @@ def check_sample(path: Path) -> bool:
             "errors": len(result.errors),
             "checks_ok": sum(c.ok for c in result.checks),
             "checks_failed": [c.name for c in result.failed_checks],
+            **_investment_counts(result.investments),
         },
     )
     return not result.errors and not result.failed_checks
+
+
+def _investment_counts(data: InvestmentData | None) -> dict[str, int]:
+    """Counts only: tickers and quantities are the owner's holdings."""
+    if data is None:
+        return {}
+    snapshot = data.snapshot
+    return {
+        "operations": len(data.operations),
+        "positions": len(snapshot.positions) if snapshot else 0,
+        "cash_lines": len(snapshot.cash) if snapshot else 0,
+    }
 
 
 def _is_sample(path: Path) -> bool:

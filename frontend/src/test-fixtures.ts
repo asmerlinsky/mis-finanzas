@@ -17,6 +17,7 @@ export function preview(overrides: Partial<Preview> = {}): Preview {
     metadata: {},
     rows: [],
     errors: [],
+    investments: null,
     ...overrides,
   }
 }

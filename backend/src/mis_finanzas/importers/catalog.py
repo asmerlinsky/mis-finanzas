@@ -1,6 +1,8 @@
 """The dedicated importers the app ships with. Registered once, at startup."""
 
 from mis_finanzas.importers import registry
+from mis_finanzas.importers.balanz.holdings_pdf import BalanzHoldingsPdf
+from mis_finanzas.importers.balanz.movements_pdf import BalanzMovementsPdf
 from mis_finanzas.importers.mercadopago.account_csv import MercadoPagoAccountCsv
 from mis_finanzas.importers.santander.account_pdf import SantanderAccountPdf
 from mis_finanzas.importers.santander.movements_xlsx import SantanderMovementsXlsx
@@ -18,4 +20,6 @@ def register_builtin_importers() -> None:
     registry.register_file_importer(MercadoPagoAccountCsv())
     registry.register_page_importer(SantanderAccountPdf())
     registry.register_page_importer(SantanderVisaPdf())
+    registry.register_page_importer(BalanzMovementsPdf())
+    registry.register_page_importer(BalanzHoldingsPdf())
     _registered = True

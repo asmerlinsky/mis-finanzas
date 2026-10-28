@@ -10,7 +10,14 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session, sessionmaker
 
-from mis_finanzas.api.routers import accounts, categories, imports, reports, transactions
+from mis_finanzas.api.routers import (
+    accounts,
+    categories,
+    imports,
+    investments,
+    reports,
+    transactions,
+)
 from mis_finanzas.core.config import Settings, get_settings
 from mis_finanzas.core.db import make_engine, make_session_factory
 from mis_finanzas.core.logging import configure_logging
@@ -18,7 +25,8 @@ from mis_finanzas.core.migrate import upgrade_to_head
 from mis_finanzas.importers.catalog import register_builtin_importers
 from mis_finanzas.market.http import PublicHttpClient
 from mis_finanzas.market.models import RateType
-from mis_finanzas.market.refresh import refresh_rates
+from mis_finanzas.market.prices import Data912PanelsSource
+from mis_finanzas.market.refresh import refresh_prices, refresh_rates
 from mis_finanzas.market.sources import ArgentinaDatosMepSource
 
 logger = logging.getLogger(__name__)
@@ -32,6 +40,7 @@ def run_daily_refresh(settings: Settings, factory: sessionmaker[Session]) -> Non
     try:
         with factory() as session:
             refresh_rates(session, client, ArgentinaDatosMepSource(), RateType.MEP, date.today())
+            refresh_prices(session, client, Data912PanelsSource(), date.today())
     except Exception as exc:
         logger.error("Daily refresh crashed", extra={"error": str(exc)})
     finally:
@@ -65,7 +74,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="mis-finanzas", lifespan=lifespan)
     app.state.settings = settings
     app.state.session_factory = make_session_factory(make_engine(settings.database_url))
-    for module in (accounts, categories, transactions, imports, reports):
+    for module in (accounts, categories, transactions, imports, reports, investments):
         app.include_router(module.router, prefix="/api")
     if settings.frontend_dist is not None and settings.frontend_dist.is_dir():
         app.mount("/", StaticFiles(directory=settings.frontend_dist, html=True), name="frontend")

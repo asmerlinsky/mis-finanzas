@@ -141,6 +141,18 @@ export interface Preview {
   metadata: Record<string, string>
   rows: PreviewRow[]
   errors: { line_number: number; message: string }[]
+  investments: InvestmentSummary | null
+}
+
+/** What a broker statement adds besides ledger rows: operations and a holdings snapshot. */
+export interface InvestmentSummary {
+  as_of: string | null
+  source: 'tenencias' | 'movimientos' | null
+  positions: number
+  cash: number
+  operations: number
+  new_operations: number
+  replaces_snapshot: boolean
 }
 
 export interface SourceAccount {
@@ -180,4 +192,42 @@ export interface MarketStatus {
   latest_rate_date: string | null
   latest_rate: string | null
   stale: boolean
+}
+
+export interface PositionValue {
+  ticker: string
+  name: string
+  asset_class: string
+  quantity: string
+  /** `mercado`: the public panel's last price; `resumen`: the holdings statement's. */
+  price: { price: string; date: string; origin: 'mercado' | 'resumen' } | null
+  value_ars: string | null
+  value_usd: string | null
+}
+
+export interface CashValue {
+  label: string
+  currency: Currency
+  amount: string
+  value_ars: string | null
+  value_usd: string | null
+}
+
+export interface Portfolio {
+  as_of: string
+  quantities_as_of: string | null
+  cash_as_of: string | null
+  total_ars: string
+  total_usd: string | null
+  missing_price: number
+  positions: PositionValue[]
+  cash: CashValue[]
+  allocation: { asset_class: string; ars: string }[]
+}
+
+export interface MonthAmount {
+  month: string
+  ars: string
+  usd: string
+  missing_rate: number
 }

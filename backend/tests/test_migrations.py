@@ -1,5 +1,6 @@
 """The migrations must produce exactly the schema the models describe."""
 
+import re
 from datetime import date
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from sqlalchemy import create_engine, text
 
 from mis_finanzas.core.migrate import alembic_config, upgrade_to_head
 from mis_finanzas.ledger.dedup import fingerprint
+from mis_finanzas.ledger.text import normalize_description
 
 
 def test_migrations_match_models(tmp_path: Path) -> None:
@@ -57,10 +59,41 @@ def test_0003_seeds_rendimientos_once_and_keeps_existing(tmp_path: Path) -> None
     engine = create_engine(url)
     with engine.begin() as db:
         db.execute(text("INSERT INTO categories (name, kind) VALUES ('Rendimientos', NULL)"))
-    upgrade_to_head(url)
-    upgrade_to_head(url)
+    command.upgrade(alembic_config(url), "0003")
+    command.upgrade(alembic_config(url), "0003")
     with engine.connect() as db:
         categories = db.execute(text("SELECT name, kind FROM categories")).all()
         patterns = db.execute(text("SELECT pattern FROM category_rules ORDER BY pattern")).scalars()
         assert categories == [("Rendimientos", None)]  # the owner's own category is kept
         assert list(patterns) == ["INTERES POR SALDO", "RENDIMIENTOS"]
+
+
+def test_0005_seeds_dividendos_as_income(tmp_path: Path) -> None:
+    url = f"sqlite:///{tmp_path / 'm.db'}"
+    upgrade_to_head(url)
+    with create_engine(url).connect() as db:
+        rows = db.execute(
+            text(
+                "SELECT c.kind, r.pattern FROM categories c "
+                "JOIN category_rules r ON r.category_id = c.id WHERE c.name = 'Dividendos'"
+            )
+        ).all()
+    assert rows == [("income", "DIVIDENDO")]
+
+
+def test_0007_seeds_inversiones_for_trades_only(tmp_path: Path) -> None:
+    url = f"sqlite:///{tmp_path / 'm.db'}"
+    upgrade_to_head(url)
+    with create_engine(url).connect() as db:
+        rows = db.execute(
+            text(
+                "SELECT c.kind, r.match_type, r.pattern FROM categories c "
+                "JOIN category_rules r ON r.category_id = c.id WHERE c.name = 'Inversiones'"
+            )
+        ).all()
+    assert {(kind, match) for kind, match, _ in rows} == {("investment", "regex")}
+    patterns = [re.compile(pattern) for _, _, pattern in rows]
+    trade = normalize_description("Boleto / 1234567 / COMPRA / 2 / EJM / usd")
+    subscription = normalize_description("Liquidación de Suscripción / 123456 / FONDO A")
+    assert all(any(p.search(line) for p in patterns) for line in (trade, subscription))
+    assert not any(p.search("COMPRA CON TARJETA DE DEBITO BOLETO") for p in patterns)

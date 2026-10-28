@@ -65,6 +65,26 @@ describe('ImportPreview', () => {
     expect(handlers.onCommit).toHaveBeenCalledWith({ skipLines: [2], skipInvalid: false })
   })
 
+  it('imports a holdings statement, which has no movements', async () => {
+    const handlers = setup(preview({
+      importer: 'balanz_holdings_pdf',
+      new_count: 0,
+      targets: [],
+      checks: [{ name: 'total de Cedears', expected: '700000', actual: '700000', ok: true }],
+      investments: {
+        as_of: '2026-10-27', source: 'tenencias', positions: 18, cash: 3,
+        operations: 0, new_operations: 0, replaces_snapshot: true,
+      },
+    }))
+    expect(screen.getByText(/Tenencias al 27\/10\/2026/)).toHaveTextContent(
+      'Tenencias al 27/10/2026: 18 posiciones, 3 saldos en monedas.',
+    )
+    expect(screen.getByText(/Reemplaza lo importado antes/)).toBeInTheDocument()
+    expect(screen.queryByText(/movimientos nuevos/)).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Importar tenencias' }))
+    expect(handlers.onCommit).toHaveBeenCalledWith({ skipLines: [], skipInvalid: false })
+  })
+
   it('shows already imported rows without a checkbox', () => {
     setup(preview({ new_count: 0, duplicate_count: 1, rows: [row(1, { duplicate: true })] }))
     expect(screen.getByText('ya importado')).toBeInTheDocument()
