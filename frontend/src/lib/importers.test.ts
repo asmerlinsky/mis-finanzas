@@ -24,6 +24,9 @@ describe('importer helpers', () => {
     expect(suggestedAccount('mercadopago/ARS')).toMatchObject({
       name: 'Mercado Pago pesos', kind: 'wallet',
     })
+    expect(suggestedAccount('santander/amex/USD')).toMatchObject({
+      name: 'Santander Amex dólares', kind: 'card', currency: 'USD',
+    })
     expect(suggestedAccount('balanz/MEP/USD')).toMatchObject({
       name: 'Balanz MEP dólares', kind: 'broker', currency: 'USD',
     })

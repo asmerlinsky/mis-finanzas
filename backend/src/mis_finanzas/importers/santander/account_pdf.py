@@ -3,7 +3,10 @@
 **What is read:**
 - Only rows under a header `Fecha · Comprobante · Movimiento · Caja de Ahorro en <moneda> ·
   [Cuenta Corriente en <moneda>] · Saldo en cuenta`. The header repeats on every page of a
-  section. The card, debit, investment and legal pages are not read.
+  section. The debit, payments, investment and legal pages are not read: they repeat
+  account movements or aren't movements.
+- The Visa card section, through `account_card`: its rows go to `santander/visa/ARS|USD`, with
+  the card statement's checks, prefixed "Visa:".
 - A movement prints on two lines: type and amounts at 8.5pt, detail at 7pt. Its date prints
   only on the first movement of each day.
 - The amount's column decides the target: `santander/CA/ARS`, `santander/CC/ARS`,
@@ -30,6 +33,7 @@ from mis_finanzas.importers.pdf_layout import (
     table_rows,
 )
 from mis_finanzas.importers.pdf_words import PageWords
+from mis_finanzas.importers.santander.account_card import read_visa_section
 from mis_finanzas.importers.santander.common import (
     PAGE_NUMBER,
     amounts_by_currency,
@@ -189,7 +193,7 @@ def _metadata(pages: list[PageWords]) -> dict[str, str]:
 
 class SantanderAccountPdf:
     name = "santander_account_pdf"
-    version = "1"
+    version = "2"  # 2: also reads the Visa section
 
     def detect_pages(self, pages: list[PageWords]) -> bool:
         if not pages:
@@ -208,4 +212,11 @@ class SantanderAccountPdf:
         for section in sections.values():
             result.rows += section.rows
             result.checks += section.checks()
+        card = read_visa_section(pages)
+        if card is not None:
+            rows, errors, card_checks, metadata = card
+            result.rows += rows
+            result.errors += errors
+            result.checks += card_checks
+            result.metadata.update(metadata)
         return result
