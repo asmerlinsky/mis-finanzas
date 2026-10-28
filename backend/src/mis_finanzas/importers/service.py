@@ -48,7 +48,7 @@ from mis_finanzas.ledger.models import (
     TransactionKind,
 )
 from mis_finanzas.ledger.rules import first_matching_rule, infer_kind
-from mis_finanzas.ledger.text import normalize_description
+from mis_finanzas.ledger.text import clean_description, normalize_description
 from mis_finanzas.monotributo import store as invoice_store
 from mis_finanzas.monotributo.records import InvoiceData
 
@@ -231,7 +231,7 @@ def prepare_rows(
                 line_number=row.line_number,
                 date=row.date,
                 amount=row.amount,
-                description=row.description,
+                description=clean_description(row.description),
                 description_norm=norm,
                 target=row.target,
                 account_id=account,

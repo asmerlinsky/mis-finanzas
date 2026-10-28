@@ -5,7 +5,7 @@ import pytest
 
 from mis_finanzas.core.money import from_cents, parse_amount, to_cents
 from mis_finanzas.ledger.dedup import fingerprint, occurrence_indexes
-from mis_finanzas.ledger.text import normalize_description
+from mis_finanzas.ledger.text import clean_description, normalize_description
 
 
 @pytest.mark.parametrize(
@@ -79,6 +79,24 @@ def test_normalize_description_decodes_html_entities() -> None:
 def test_normalize_description_repairs_double_encoded_accents() -> None:
     assert normalize_description("Transf a martÃ\xadn") == "TRANSF A MARTIN"
     assert normalize_description("Peluquería") == "PELUQUERIA"  # already fine: untouched
+
+
+@pytest.mark.parametrize(
+    ("printed", "shown", "normalized"),
+    [
+        # MARTÍN encoded twice and then lowercased by the bank, behind HTML entities.
+        ("Transf. a mart&#227;&#141;n gomez", "Transf. a martín gomez", "TRANSF. A MARTIN GOMEZ"),
+        ("MARTÃ\x8dN", "MARTÍN", "MARTIN"),
+        ("pe\u00f1a mart\u00e3\u00adn", "peña martín", "PENA MARTIN"),
+        ("São Paulo", "São Paulo", "SAO PAULO"),  # real accents: untouched
+        ("  Pagó   rappi ", "Pagó rappi", "PAGO RAPPI"),
+    ],
+)
+def test_clean_description_keeps_case_and_accents(
+    printed: str, shown: str, normalized: str
+) -> None:
+    assert clean_description(printed) == shown
+    assert normalize_description(printed) == normalized
 
 
 def test_normalize_description_drops_invisible_characters() -> None:
