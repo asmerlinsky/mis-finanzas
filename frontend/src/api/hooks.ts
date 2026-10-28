@@ -13,6 +13,7 @@ import type {
   MarketStatus,
   MonthSummary,
   Rule,
+  SourceAccount,
   TransactionFilters,
   TransactionPage,
   TransferCandidate,
@@ -28,6 +29,13 @@ export const useRules = () => useQuery({ queryKey: ['rules'], queryFn: () => api
 
 export const useMappings = () =>
   useQuery({ queryKey: ['mappings'], queryFn: () => api<Mapping[]>('/mappings') })
+
+export const useSourceAccounts = () =>
+  useQuery({ queryKey: ['source-accounts'], queryFn: () => api<SourceAccount[]>('/source-accounts') })
+
+/** `santander/CA/ARS` as a URL path, each segment escaped. */
+export const sourceAccountPath = (key: string) =>
+  `/source-accounts/${key.split('/').map(encodeURIComponent).join('/')}`
 
 export const useImports = () =>
   useQuery({ queryKey: ['imports'], queryFn: () => api<ImportBatch[]>('/imports') })

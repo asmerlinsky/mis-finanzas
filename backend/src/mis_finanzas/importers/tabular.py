@@ -52,7 +52,7 @@ class TabularMapping(BaseModel):
         return [self.date_column, *self.description_columns, *(c for c in optional if c)]
 
 
-def _decode(content: bytes) -> str:
+def decode_text(content: bytes) -> str:
     for encoding in ("utf-8-sig", "cp1252"):
         try:
             return content.decode(encoding)
@@ -62,7 +62,7 @@ def _decode(content: bytes) -> str:
 
 
 def _csv_lines(content: bytes, delimiter: str | None) -> list[list[str]]:
-    text = _decode(content)
+    text = decode_text(content)
     if delimiter is None:
         try:
             delimiter = csv.Sniffer().sniff(text[:4096], delimiters=";,\t|").delimiter

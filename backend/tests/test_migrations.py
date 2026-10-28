@@ -49,3 +49,18 @@ def test_0002_recomputes_fingerprints_without_losing_rows(tmp_path: Path) -> Non
             fingerprint(1, date(2026, 1, 5), -100000, 0),
             fingerprint(1, date(2026, 1, 5), -100000, 1),  # kept, as the next occurrence
         ]
+
+
+def test_0003_seeds_rendimientos_once_and_keeps_existing(tmp_path: Path) -> None:
+    url = f"sqlite:///{tmp_path / 'm.db'}"
+    command.upgrade(alembic_config(url), "0002")
+    engine = create_engine(url)
+    with engine.begin() as db:
+        db.execute(text("INSERT INTO categories (name, kind) VALUES ('Rendimientos', NULL)"))
+    upgrade_to_head(url)
+    upgrade_to_head(url)
+    with engine.connect() as db:
+        categories = db.execute(text("SELECT name, kind FROM categories")).all()
+        patterns = db.execute(text("SELECT pattern FROM category_rules ORDER BY pattern")).scalars()
+        assert categories == [("Rendimientos", None)]  # the owner's own category is kept
+        assert list(patterns) == ["INTERES POR SALDO", "RENDIMIENTOS"]

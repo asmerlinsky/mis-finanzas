@@ -341,3 +341,39 @@ button.link {
 code {
   font-size: 0.85rem;
 }
+
+.checks,
+.blockers {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 12px;
+}
+
+.check-ok {
+  color: var(--success);
+}
+
+.check-fail,
+.blockers li {
+  color: var(--error);
+}
+
+tr.near td {
+  background: var(--warning-bg);
+}
+
+.tag.warn {
+  border-color: var(--warning-text);
+  color: var(--warning-text);
+}
+
+table.targets {
+  margin-bottom: 12px;
+}
+
+.target-account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
