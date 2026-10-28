@@ -8,6 +8,9 @@ Preview and commit both re-parse the uploaded bytes, so the server keeps no stat
 them and the commit always writes exactly what the file contains. The commit is refused
 while a statement total doesn't match, a target has no account, or rows have errors (unless
 explicitly skipped); it writes everything in one transaction or nothing.
+
+A broker statement also carries investment data (operations, a holdings snapshot), written
+by `investments.store` in the same transaction. A holdings statement has no ledger rows.
 """
 
 import hashlib
@@ -33,6 +36,8 @@ from mis_finanzas.importers.base import (
 )
 from mis_finanzas.importers.models import ImportMapping, SourceAccount
 from mis_finanzas.importers.tabular import GenericTabularImporter, TabularMapping
+from mis_finanzas.investments import store as investment_store
+from mis_finanzas.investments.records import InvestmentData
 from mis_finanzas.ledger.dedup import fingerprint, occurrence_indexes
 from mis_finanzas.ledger.models import (
     Category,
@@ -84,6 +89,8 @@ class ImportPreview:
     errors: list[RowError] = field(default_factory=list)
     checks: list[Check] = field(default_factory=list)
     metadata: dict[str, str] = field(default_factory=dict)
+    investments: investment_store.InvestmentSummary | None = None
+    investment_data: InvestmentData | None = None
 
     @property
     def new_rows(self) -> list[PreviewRow]:
@@ -240,6 +247,7 @@ def build_preview(
     parsed = _parse(session, content, filename, mapping)
     sha256 = hashlib.sha256(content).hexdigest()
     batch = session.scalar(select(ImportBatch.id).where(ImportBatch.file_sha256 == sha256))
+    data = parsed.result.investments
     return ImportPreview(
         importer=parsed.importer,
         importer_version=parsed.version,
@@ -251,6 +259,8 @@ def build_preview(
         errors=parsed.result.errors,
         checks=parsed.result.checks,
         metadata=parsed.result.metadata,
+        investments=investment_store.summarize(session, data) if data else None,
+        investment_data=data,
     )
 
 
@@ -272,7 +282,7 @@ def _check_committable(
     unknown = skip_lines - {r.line_number for r in preview.rows}
     if unknown:
         raise ImportRejectedError(f"lines to skip are not rows of this file: {sorted(unknown)}")
-    if not preview.rows:
+    if not preview.rows and preview.investment_data is None:
         raise ImportRejectedError("the file has no rows to import")
 
 
@@ -320,6 +330,8 @@ def commit_import(
     session.add(batch)
     session.flush()
     session.add_all(_to_transaction(batch.id, row) for row in to_write)
+    if preview.investment_data is not None:
+        investment_store.store(session, batch.id, preview.investment_data)
     session.commit()
     logger.info(
         "Import committed",

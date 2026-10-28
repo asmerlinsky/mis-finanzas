@@ -7,11 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `mis-finanzas` is a personal finance app for one owner in Argentina:
 - a ledger of earnings and expenses;
 - statement imports from the owner's bank, wallet and broker;
-- every total shown in ARS and in USD at the daily MEP rate.
+- every total shown in ARS and in USD at the daily MEP rate;
+- broker investments: Balanz statements, valued daily with public market prices.
 
-Later slices, not built yet: monotributo tracking from ARCA's "Mis Comprobantes" export, and
-broker investments. The design and its decisions are in
-`docs/specs/2026-10-27-mis-finanzas-design.md`. Read it before starting a new slice. The UI and
+Not built yet: monotributo tracking from ARCA's "Mis Comprobantes" export. The design and its
+decisions are in `docs/specs/2026-10-27-mis-finanzas-design.md`. Read it before starting a new slice. The UI and
 the domain terms are in Spanish.
 
 **Hard constraint:** personal data is processed and stored only locally. No request may carry
@@ -44,7 +44,7 @@ Node comes from `n` (`/usr/local/bin/node`, v22). The apt `/usr/bin/node` v12 is
 ## Architecture
 
 The backend is `backend/src/mis_finanzas/`: FastAPI + SQLAlchemy 2.1 + SQLite, Python 3.12, uv.
-Dependencies point one way: `api → importers/reports → ledger/market → core`.
+Dependencies point one way: `api → importers/reports → investments → ledger/market → core`.
 - `core/`: settings (`MIS_FINANZAS_*` env vars), engine/session, money helpers, logging, and
   the Alembic runner.
 - `ledger/`: models and the pure bookkeeping logic:
@@ -66,7 +66,11 @@ Dependencies point one way: `api → importers/reports → ledger/market → cor
     samples. Use `pdf_layout.py` to read tables: header rows need **all** labels, so data is
     only read under the right table.
 - `tools/`: the redaction, preview and sample-check commands. Nothing in the app imports it.
-- `market/`: the FX rate source adapters, the daily refresh and the date → rate lookup.
+- `investments/`: instruments, operations and holdings snapshots from broker statements.
+  Parsers emit its plain records (`records.py`); `store.py` writes them in the import's
+  transaction. Broker cash is ledger rows on the broker's accounts, not here.
+- `market/`: the FX rate and price source adapters (ArgentinaDatos MEP, data912 panels), the
+  daily refresh and the date → rate lookup.
 - `reports/`: monthly and per-category totals in both currencies.
 
 Domain rules that the code relies on:
@@ -74,6 +78,8 @@ Domain rules that the code relies on:
   strings in JSON. FX rates use `DecimalText`. Never use float.
 - **Only `income`/`expense` kinds count in totals.** `transfer` (paired rows across own
   accounts), `fx` and `investment` don't. A category's `kind` overrides the sign-based kind.
+  - Transfers pair only within one currency. Paying a card's USD balance in pesos is **not
+    supported**: both sides stay unpaired and count in totals.
 - **Dedup fingerprint** (v2) = account, date, cents and occurrence index among rows with the
   same date and amount in the file. There is **no description**, because two exports of one
   account word it differently. Overlapping files (the Excel and the PDF of the same month)

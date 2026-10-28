@@ -9,6 +9,7 @@ from mis_finanzas.api.deps import SessionDep, SettingsDep
 from mis_finanzas.api.schemas import (
     CheckOut,
     ImportBatchOut,
+    InvestmentSummaryOut,
     MappingIn,
     MappingOut,
     PreviewOut,
@@ -27,6 +28,7 @@ from mis_finanzas.importers.service import (
     build_preview,
     commit_import,
 )
+from mis_finanzas.investments.store import InvestmentSummary
 from mis_finanzas.ledger.models import Account, ImportBatch
 
 router = APIRouter(tags=["imports"])
@@ -120,6 +122,21 @@ def _preview_out(preview: ImportPreview) -> PreviewOut:
         metadata=preview.metadata,
         rows=rows,
         errors=[RowErrorOut(line_number=e.line_number, message=e.message) for e in preview.errors],
+        investments=_investments_out(preview.investments),
+    )
+
+
+def _investments_out(summary: InvestmentSummary | None) -> InvestmentSummaryOut | None:
+    if summary is None:
+        return None
+    return InvestmentSummaryOut(
+        as_of=summary.as_of,
+        source=summary.source.value if summary.source else None,
+        positions=summary.positions,
+        cash=summary.cash,
+        operations=summary.operations,
+        new_operations=summary.new_operations,
+        replaces_snapshot=summary.replaces_snapshot,
     )
 
 

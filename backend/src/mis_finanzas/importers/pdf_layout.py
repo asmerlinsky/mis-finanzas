@@ -5,11 +5,18 @@ below such a header are data, so words elsewhere on the page (page headers, lega
 summaries) are never read as rows.
 
 Words on a line are first grouped into chunks, splitting where the gap is wider than a
-space; a chunk is one cell value (`-$ 1.234,56`, a whole description). Each chunk goes to the
-column whose header label it overlaps most. A chunk under no label falls back to the column
+space, and between two amounts however close; a chunk is one cell value (`-$ 1.234,56`, a
+whole description).
+
+A chunk that starts inside a header label belongs to that label's column (Balanz prints
+values from where the label starts, overrunning toward the next label). Otherwise it goes to
+the column whose label it overlaps most. A chunk under no label falls back to the column
 range holding its center: ranges run from each label's left edge to the next label's left
 edge. So `$ 9.000,00` stays together under `Saldo` even when its `$` starts left of the
 label, and a long description can run on toward the next column.
+
+A label may appear twice in one header (`Impor. IVA` on Balanz statements): list it twice,
+and the second occurrence becomes the column `Impor. IVA (2)`.
 """
 
 import math
@@ -28,6 +35,8 @@ COLUMN_TOLERANCE = 2.0
 CHUNK_GAP = 6.0
 
 _NOT_WORD = re.compile(r"\W")
+# A word that is a decimal amount by itself (`1.234,56`, `-3,47`): two of them are never one value.
+_AMOUNT_WORD = re.compile(r"^-?\d[\d.]*,\d+$")
 
 
 def _token(text: str) -> str:
@@ -62,6 +71,9 @@ class Column:
     def holds(self, x0: float, x1: float) -> bool:
         return self.left <= (x0 + x1) / 2 < self.right
 
+    def starts_in_label(self, x0: float) -> bool:
+        return self.label_x0 <= x0 < self.label_x1
+
     def overlap(self, x0: float, x1: float) -> float:
         return max(0.0, min(x1, self.label_x1) - max(x0, self.label_x0))
 
@@ -77,6 +89,9 @@ class HeaderRow:
 
     def column_of(self, x0: float, x1: float) -> Column | None:
         """The column a value spanning `x0..x1` belongs to."""
+        starting = next((c for c in self.columns if c.starts_in_label(x0)), None)
+        if starting is not None:
+            return starting
         best = max(self.columns, key=lambda c: c.overlap(x0, x1))
         if best.overlap(x0, x1) > 0:
             return best
@@ -108,14 +123,36 @@ def lines(words: Sequence[Word], tolerance: float = LINE_TOLERANCE) -> list[Line
     return [Line(tuple(sorted(group, key=lambda w: w.x0))) for group in groups]
 
 
-def _label_span(line: Line, label: str) -> tuple[float, float] | None:
-    """`(x0, x1)` of `label`'s words, consecutive on `line`; case, accents and dots ignored."""
+def _label_spans(line: Line, label: str) -> list[tuple[float, float]]:
+    """`(x0, x1)` of each place `label`'s words appear, consecutive, on `line`, left to right.
+
+    Case, accents and dots are ignored.
+    """
     wanted = [t for t in (_token(part) for part in label.split()) if t]
     tokens = [_token(w.text) for w in line.words]
-    for start in range(len(tokens) - len(wanted) + 1):
-        if tokens[start : start + len(wanted)] == wanted:
-            return line.words[start].x0, line.words[start + len(wanted) - 1].x1
-    return None
+    return [
+        (line.words[start].x0, line.words[start + len(wanted) - 1].x1)
+        for start in range(len(tokens) - len(wanted) + 1)
+        if tokens[start : start + len(wanted)] == wanted
+    ]
+
+
+def column_key(label: str, occurrence: int) -> str:
+    """The column name of a label's `occurrence`-th appearance (0-based) in one header."""
+    return label if occurrence == 0 else f"{label} ({occurrence + 1})"
+
+
+def _header_spans(line: Line, labels: Sequence[str]) -> list[tuple[str, float, float]] | None:
+    seen: dict[str, int] = {}
+    spans = []
+    for label in labels:
+        occurrence = seen.get(label, 0)
+        seen[label] = occurrence + 1
+        found = _label_spans(line, label)
+        if len(found) <= occurrence:
+            return None
+        spans.append((column_key(label, occurrence), *found[occurrence]))
+    return spans
 
 
 def _columns(spans: list[tuple[str, float, float]], page_width: float) -> tuple[Column, ...]:
@@ -132,18 +169,23 @@ def find_header_rows(page: PageWords, labels: Sequence[str]) -> list[HeaderRow]:
     """Every line holding all `labels` (a label may span words: "Caja de Ahorro")."""
     headers = []
     for line in lines(visible(page.words)):
-        found = [(label, _label_span(line, label)) for label in labels]
-        if all(span is not None for _, span in found):
-            spans = [(label, span[0], span[1]) for label, span in found if span is not None]
+        spans = _header_spans(line, labels)
+        if spans is not None:
             headers.append(HeaderRow(line, _columns(spans, page.width)))
     return headers
 
 
+def _both_amounts(left: Word, right: Word) -> bool:
+    return bool(_AMOUNT_WORD.match(left.text) and _AMOUNT_WORD.match(right.text))
+
+
 def chunks(line: Line, gap: float = CHUNK_GAP) -> list[list[Word]]:
-    """The line's words split into values wherever the space between words exceeds `gap`."""
+    """The line's words split into values wherever the space between words exceeds `gap`,
+    and between two amounts, however close."""
     groups: list[list[Word]] = []
     for word in line.words:
-        if groups and word.x0 - groups[-1][-1].x1 <= gap:
+        previous = groups[-1][-1] if groups else None
+        if previous and word.x0 - previous.x1 <= gap and not _both_amounts(previous, word):
             groups[-1].append(word)
         else:
             groups.append([word])

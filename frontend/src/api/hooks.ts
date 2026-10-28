@@ -11,7 +11,9 @@ import type {
   ImportBatch,
   Mapping,
   MarketStatus,
+  MonthAmount,
   MonthSummary,
+  Portfolio,
   Rule,
   SourceAccount,
   TransactionFilters,
@@ -62,6 +64,15 @@ export const useCategoryTotals = (start: string, end: string) =>
   useQuery({
     queryKey: ['category-totals', start, end],
     queryFn: () => api<CategoryTotal[]>(`/reports/categories${queryString({ start, end })}`),
+  })
+
+export const usePortfolio = () =>
+  useQuery({ queryKey: ['portfolio'], queryFn: () => api<Portfolio>('/investments/portfolio') })
+
+export const useDividends = (start: string, end: string) =>
+  useQuery({
+    queryKey: ['dividends', start, end],
+    queryFn: () => api<MonthAmount[]>(`/investments/dividends${queryString({ start, end })}`),
   })
 
 export const useMarketStatus = () =>

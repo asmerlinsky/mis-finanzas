@@ -130,6 +130,18 @@ class TargetOut(BaseModel):
     rows: int
 
 
+class InvestmentSummaryOut(BaseModel):
+    """What a broker statement adds besides ledger rows."""
+
+    as_of: date | None
+    source: str | None  # "tenencias" or "movimientos"
+    positions: int
+    cash: int
+    operations: int
+    new_operations: int
+    replaces_snapshot: bool
+
+
 class PreviewOut(BaseModel):
     importer: str
     filename: str
@@ -143,6 +155,7 @@ class PreviewOut(BaseModel):
     metadata: dict[str, str]
     rows: list[PreviewRowOut]
     errors: list[RowErrorOut]
+    investments: InvestmentSummaryOut | None = None
 
 
 class SourceAccountIn(BaseModel):
@@ -186,3 +199,51 @@ class MarketStatusOut(BaseModel):
     latest_rate_date: date | None
     latest_rate: Decimal | None
     stale: bool
+
+
+class PriceOut(BaseModel):
+    price: Decimal
+    date: date
+    origin: str  # "mercado" (public panel) or "resumen" (holdings statement)
+
+
+class PositionValueOut(BaseModel):
+    ticker: str
+    name: str
+    asset_class: str
+    quantity: Decimal
+    price: PriceOut | None
+    value_ars: Decimal | None
+    value_usd: Decimal | None
+
+
+class CashValueOut(BaseModel):
+    label: str
+    currency: str
+    amount: Decimal
+    value_ars: Decimal | None
+    value_usd: Decimal | None
+
+
+class AllocationOut(BaseModel):
+    asset_class: str
+    ars: Decimal
+
+
+class PortfolioOut(BaseModel):
+    as_of: date
+    quantities_as_of: date | None
+    cash_as_of: date | None
+    total_ars: Decimal
+    total_usd: Decimal | None
+    missing_price: int
+    positions: list[PositionValueOut]
+    cash: list[CashValueOut]
+    allocation: list[AllocationOut]
+
+
+class MonthAmountOut(BaseModel):
+    month: str
+    ars: Decimal
+    usd: Decimal
+    missing_rate: int

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
     # Only these hosts may be contacted, and only to download public data.
-    public_hosts: list[str] = ["api.argentinadatos.com"]
+    public_hosts: list[str] = ["api.argentinadatos.com", "data912.com"]
     http_timeout_seconds: float = 15.0
     market_refresh_on_startup: bool = True
     frontend_dist: Path | None = None

@@ -24,6 +24,10 @@ describe('importer helpers', () => {
     expect(suggestedAccount('mercadopago/ARS')).toMatchObject({
       name: 'Mercado Pago pesos', kind: 'wallet',
     })
+    expect(suggestedAccount('balanz/MEP/USD')).toMatchObject({
+      name: 'Balanz MEP dólares', kind: 'broker', currency: 'USD',
+    })
+    expect(suggestedAccount('balanz/ARS')).toMatchObject({ name: 'Balanz pesos', kind: 'broker' })
   })
 })
 
@@ -41,5 +45,13 @@ describe('blockers', () => {
     })
     expect(blockers(bad, false, 0)).toHaveLength(5)
     expect(blockers(bad, true, 0)).toHaveLength(4) // errors skipped on purpose
+  })
+
+  it('lets a broker statement through with no new movements', () => {
+    const investments = {
+      as_of: '2026-10-27', source: 'tenencias' as const, positions: 1, cash: 0,
+      operations: 0, new_operations: 0, replaces_snapshot: false,
+    }
+    expect(blockers(preview({ investments }), false, 0)).toEqual([])
   })
 })

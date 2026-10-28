@@ -10,6 +10,19 @@ export function formatMoney(value: string | number, currency: Currency): string 
   return FORMATTERS[currency].format(Number(value))
 }
 
+const QUANTITY = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 6 })
+const PERCENT = new Intl.NumberFormat('es-AR', { style: 'percent', maximumFractionDigits: 1 })
+
+/** A holding's quantity: "1234.5" -> "1.234,5". */
+export function formatQuantity(value: string | number): string {
+  return QUANTITY.format(Number(value))
+}
+
+/** A share of a whole: 0.256 -> "25,6 %". */
+export function formatPercent(share: number): string {
+  return PERCENT.format(share)
+}
+
 /** "2026-01-31" -> "31/01/2026", without timezone shifts. */
 export function formatDate(iso: string): string {
   const [year, month, day] = iso.split('-')
@@ -28,6 +41,19 @@ function isoDate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${date.getFullYear()}-${month}-${day}`
+}
+
+/** Every month from `start` to `end` (ISO dates), as "YYYY-MM". */
+export function monthsBetween(start: string, end: string): string[] {
+  const months: string[] = []
+  let [year, month] = start.split('-').map(Number)
+  const [endYear, endMonth] = end.split('-').map(Number)
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    months.push(`${year}-${String(month).padStart(2, '0')}`)
+    month = month === 12 ? 1 : month + 1
+    if (month === 1) year += 1
+  }
+  return months
 }
 
 /** The last `months` calendar months including the current one, as ISO dates. */

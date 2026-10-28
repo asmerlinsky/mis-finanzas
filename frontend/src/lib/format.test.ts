@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
 import { queryString } from '../api/client'
-import { formatDate, formatMoney, formatMonth, lastMonthsRange } from './format'
+import { formatDate, formatMoney, formatMonth, lastMonthsRange, monthsBetween } from './format'
 
 // Intl uses non-breaking spaces between symbol and number.
 const plain = (text: string) => text.replace(/\s/g, ' ')
+
+describe('monthsBetween', () => {
+  it('lists every month across a year end', () => {
+    expect(monthsBetween('2025-11-01', '2026-02-28')).toEqual(['2025-11', '2025-12', '2026-01', '2026-02'])
+  })
+})
 
 describe('format', () => {
   it('formats ARS and USD with Argentine separators', () => {

@@ -1,4 +1,4 @@
-"""Public market data stored locally: FX rates and a log of daily fetches."""
+"""Public market data stored locally: FX rates, instrument prices and a log of daily fetches."""
 
 import enum
 from datetime import date, datetime
@@ -25,6 +25,21 @@ class FxRate(Base):
     date: Mapped[date] = mapped_column(Date, index=True)
     buy: Mapped[Decimal] = mapped_column(DecimalText)
     sell: Mapped[Decimal] = mapped_column(DecimalText)
+    source: Mapped[str] = mapped_column(String(100))
+
+
+class InstrumentPrice(Base):
+    """A listed instrument's last price on the day it was downloaded, as the panel quotes it
+    (bonds per 100 nominal). Prices are kept for every symbol in the panels, not only held ones."""
+
+    __tablename__ = "instrument_prices"
+    __table_args__ = (UniqueConstraint("symbol", "date"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    date: Mapped[date] = mapped_column(Date)
+    price: Mapped[Decimal] = mapped_column(DecimalText)
+    panel: Mapped[str] = mapped_column(String(30))
     source: Mapped[str] = mapped_column(String(100))
 
 
