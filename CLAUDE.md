@@ -60,7 +60,10 @@ Dependencies point one way:
 - `ledger/`: models and the pure bookkeeping logic:
   - rule matching (`rules.py`);
   - fingerprints (`dedup.py`);
-  - transfer pairing (`transfers.py`).
+  - transfer pairing (`transfers.py`);
+  - rule suggestions (`suggestions.py`): uncategorized movements grouped by merchant key.
+    `reports/rule_suggestions.py` ranks them in pesos and counts what each rule would catch
+    (`GET /api/rules/suggestions`, `GET /api/rules/preview`).
 - `importers/`: parsing is pure (bytes → `ParseResult`, no DB). `service.py` builds the preview
   and commits. Preview and commit both re-parse the upload, so the server keeps no state
   between them.
