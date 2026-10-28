@@ -14,6 +14,7 @@ import { useCategoryTotals, useMonthly } from '../api/hooks'
 import type { CategoryTotal, Currency, MonthSummary } from '../api/types'
 import { Empty, ErrorNote, Money, Section } from '../components/ui'
 import { formatMoney, formatMonth, lastMonthsRange } from '../lib/format'
+import { CategoryMonthTable } from './dashboard/CategoryMonths'
 
 const RANGES = [3, 6, 12, 24]
 
@@ -104,7 +105,17 @@ export function Dashboard() {
   const { start, end } = lastMonthsRange(months)
   const monthly = useMonthly(start, end)
   const categories = useCategoryTotals(start, end)
+  const [byMonth, setByMonth] = useState(false)
   const missing = (monthly.data ?? []).reduce((n, m) => n + m.missing_rate, 0)
+  const view = (
+    <div className="toggle" role="group" aria-label="Vista de categorías">
+      {([false, true] as const).map((monthly) => (
+        <button key={String(monthly)} className={monthly === byMonth ? 'active' : ''} onClick={() => setByMonth(monthly)}>
+          {monthly ? 'Por mes' : 'Total'}
+        </button>
+      ))}
+    </div>
+  )
 
   const controls = (
     <div className="controls">
@@ -143,9 +154,18 @@ export function Dashboard() {
           </p>
         )}
       </Section>
-      <Section title="Gastos por categoría">
-        <ErrorNote error={categories.error} />
-        {categories.data && <CategoryTable totals={categories.data} />}
+      <Section title="Gastos por categoría" actions={view}>
+        {byMonth ? (
+          <>
+            <p className="muted">Tocá un monto para ver los movimientos que lo forman.</p>
+            <CategoryMonthTable range={{ start, end }} currency={currency} />
+          </>
+        ) : (
+          <>
+            <ErrorNote error={categories.error} />
+            {categories.data && <CategoryTable totals={categories.data} />}
+          </>
+        )}
       </Section>
     </>
   )

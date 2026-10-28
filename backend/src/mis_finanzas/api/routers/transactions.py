@@ -58,6 +58,7 @@ def _filtered(
     kind: TransactionKind | None,
     uncategorized: bool,
     search: str | None,
+    category_id: int | None = None,
 ) -> Select[Transaction]:
     if account_id is not None:
         query = query.where(Transaction.account_id == account_id)
@@ -69,6 +70,8 @@ def _filtered(
         query = query.where(Transaction.kind == kind)
     if uncategorized:
         query = query.where(Transaction.category_id.is_(None))
+    if category_id is not None:
+        query = query.where(Transaction.category_id == category_id)
     if search:
         query = query.where(Transaction.description_norm.contains(search.strip().upper()))
     return query
@@ -83,10 +86,13 @@ def list_transactions(
     kind: TransactionKind | None = None,
     uncategorized: bool = False,
     search: str | None = None,
+    category_id: int | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> TransactionPage:
-    query = _filtered(select(Transaction), account_id, start, end, kind, uncategorized, search)
+    query = _filtered(
+        select(Transaction), account_id, start, end, kind, uncategorized, search, category_id
+    )
     total = session.scalar(select(func.count()).select_from(query.subquery())) or 0
     page = query.order_by(Transaction.date.desc(), Transaction.id.desc()).limit(limit)
     items = session.scalars(page.offset(offset)).unique()

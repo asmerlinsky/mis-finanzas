@@ -9,8 +9,11 @@ import type {
   AuthStatus,
   Category,
   ExchangeCandidate,
+  HistoryPoint,
+  CategoryMonths,
   CategoryTotal,
   ImportBatch,
+  InstrumentDividends,
   Invoice,
   Mapping,
   MarketStatus,
@@ -103,6 +106,22 @@ export const useInvoices = () =>
 
 export const useAuthStatus = () =>
   useQuery({ queryKey: ['auth-status'], queryFn: () => api<AuthStatus>('/auth/status') })
+
+export const useCategoryMonths = (start: string, end: string) =>
+  useQuery({
+    queryKey: ['category-months', start, end],
+    queryFn: () => api<CategoryMonths[]>(`/reports/categories/monthly${queryString({ start, end })}`),
+  })
+
+export const useInvestmentHistory = () =>
+  useQuery({ queryKey: ['investment-history'], queryFn: () => api<HistoryPoint[]>('/investments/history') })
+
+export const useDividendsByInstrument = (start: string, end: string) =>
+  useQuery({
+    queryKey: ['dividends-by-instrument', start, end],
+    queryFn: () =>
+      api<InstrumentDividends[]>(`/investments/dividends/by-instrument${queryString({ start, end })}`),
+  })
 
 export const useMarketStatus = () =>
   useQuery({ queryKey: ['market-status'], queryFn: () => api<MarketStatus>('/market/status') })

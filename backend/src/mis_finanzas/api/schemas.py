@@ -227,6 +227,21 @@ class MonthSummaryOut(BaseModel):
     missing_rate: int
 
 
+class CategoryMonthOut(BaseModel):
+    month: str
+    ars: Decimal
+    usd: Decimal
+
+
+class CategoryMonthsOut(BaseModel):
+    category: str
+    category_id: int | None  # None: "Sin categoría"
+    months: list[CategoryMonthOut]
+    total_ars: Decimal
+    total_usd: Decimal
+    missing_rate: int
+
+
 class CategoryTotalOut(BaseModel):
     category: str
     ars: Decimal
@@ -254,6 +269,12 @@ class PositionValueOut(BaseModel):
     price: PriceOut | None
     value_ars: Decimal | None
     value_usd: Decimal | None
+    # Of the part whose cost is known (`coverage`, 0..1); None when no part is.
+    coverage: Decimal | None
+    cost_ars: Decimal | None
+    cost_usd: Decimal | None
+    gain_ars: Decimal | None
+    gain_usd: Decimal | None
 
 
 class CashValueOut(BaseModel):
@@ -279,6 +300,27 @@ class PortfolioOut(BaseModel):
     positions: list[PositionValueOut]
     cash: list[CashValueOut]
     allocation: list[AllocationOut]
+    # Over the parts of positions whose cost is known.
+    cost_ars: Decimal
+    gain_ars: Decimal
+    cost_usd: Decimal
+    gain_usd: Decimal
+
+
+class HistoryPointOut(BaseModel):
+    date: date
+    ars: Decimal
+    usd: Decimal | None
+    source: str  # "resumen" (a holdings statement) or "mercado" (downloaded prices)
+
+
+class InstrumentDividendsOut(BaseModel):
+    ticker: str
+    name: str | None
+    ars: Decimal
+    usd: Decimal
+    payments: int
+    missing_rate: int
 
 
 class MonthAmountOut(BaseModel):

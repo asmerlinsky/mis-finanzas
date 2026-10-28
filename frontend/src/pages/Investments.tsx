@@ -4,20 +4,14 @@ import { useState } from 'react'
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { useDividends, usePortfolio } from '../api/hooks'
-import type { Currency, MonthAmount, Portfolio, PositionValue } from '../api/types'
+import type { Currency, MonthAmount, Portfolio } from '../api/types'
 import { Empty, ErrorNote, Money, Section } from '../components/ui'
-import {
-  formatDate,
-  formatMoney,
-  formatMonth,
-  formatPercent,
-  formatQuantity,
-  lastMonthsRange,
-  monthsBetween,
-} from '../lib/format'
+import { formatDate, formatMoney, formatMonth, formatPercent, lastMonthsRange, monthsBetween } from '../lib/format'
+import { DividendsByInstrument } from './investments/DividendsByInstrument'
+import { History } from './investments/History'
+import { Positions } from './investments/Positions'
 
 const RANGES = [12, 24, 36]
-const ORIGIN_LABELS = { mercado: 'mercado', resumen: 'resumen' } as const
 
 function CurrencyToggle({ value, onChange }: { value: Currency; onChange: (c: Currency) => void }) {
   return (
@@ -31,8 +25,15 @@ function CurrencyToggle({ value, onChange }: { value: Currency; onChange: (c: Cu
   )
 }
 
-function valueIn(item: { value_ars: string | null; value_usd: string | null }, currency: Currency) {
-  return currency === 'ARS' ? item.value_ars : item.value_usd
+function GainTile({ portfolio, currency }: { portfolio: Portfolio; currency: Currency }) {
+  const gain = Number(currency === 'ARS' ? portfolio.gain_ars : portfolio.gain_usd)
+  const cost = Number(currency === 'ARS' ? portfolio.cost_ars : portfolio.cost_usd)
+  if (cost <= 0) return <>—</>
+  return (
+    <>
+      <Money value={gain} currency={currency} /> <span className="muted small">{formatPercent(gain / cost)}</span>
+    </>
+  )
 }
 
 function Totals({ portfolio, currency }: { portfolio: Portfolio; currency: Currency }) {
@@ -41,6 +42,10 @@ function Totals({ portfolio, currency }: { portfolio: Portfolio; currency: Curre
     {
       label: 'Valor total',
       value: total === null ? 'sin cotización MEP' : <Money value={total} currency={currency} />,
+    },
+    {
+      label: 'Ganancia (sobre el costo conocido)',
+      value: <GainTile portfolio={portfolio} currency={currency} />,
     },
     {
       label: 'Cantidades al',
@@ -95,73 +100,6 @@ function Allocation({ portfolio }: { portfolio: Portfolio }) {
         </BarChart>
       </ResponsiveContainer>
     </div>
-  )
-}
-
-function PriceCell({ position }: { position: PositionValue }) {
-  if (!position.price) return <span className="muted">sin precio</span>
-  const { price, date, origin } = position.price
-  return (
-    <>
-      <Money value={price} currency="ARS" />
-      <span className="muted small">
-        {' '}
-        {ORIGIN_LABELS[origin]} {formatDate(date)}
-      </span>
-    </>
-  )
-}
-
-function Positions({ portfolio, currency }: { portfolio: Portfolio; currency: Currency }) {
-  return (
-    <table>
-      <thead>
-        <tr>
-          <th>Especie</th>
-          <th>Descripción</th>
-          <th>Clase</th>
-          <th className="num">Cantidad</th>
-          <th className="num">Precio</th>
-          <th className="num">Valor</th>
-        </tr>
-      </thead>
-      <tbody>
-        {portfolio.positions.map((p) => {
-          const value = valueIn(p, currency)
-          return (
-            <tr key={p.ticker}>
-              <td>
-                <code>{p.ticker}</code>
-              </td>
-              <td>{p.name}</td>
-              <td>{p.asset_class}</td>
-              <td className="num">{formatQuantity(p.quantity)}</td>
-              <td className="num">
-                <PriceCell position={p} />
-              </td>
-              <td className="num">
-                {value === null ? <span className="muted">—</span> : <Money value={value} currency={currency} />}
-              </td>
-            </tr>
-          )
-        })}
-        {portfolio.cash.map((c) => {
-          const value = valueIn(c, currency)
-          return (
-            <tr key={c.label}>
-              <td colSpan={3}>{c.label}</td>
-              <td className="num">
-                <Money value={c.amount} currency={c.currency} />
-              </td>
-              <td />
-              <td className="num">
-                {value === null ? <span className="muted">—</span> : <Money value={value} currency={currency} />}
-              </td>
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
   )
 }
 
@@ -222,6 +160,8 @@ function Dividends({ currency }: { currency: Currency }) {
             <span className="muted"> (neto de los gastos cobrados sobre cada dividendo)</span>
           </p>
           <DividendChart months={rows} range={range} currency={currency} />
+          <h3>Por especie</h3>
+          <DividendsByInstrument range={range} currency={currency} />
         </>
       )}
     </Section>
@@ -246,10 +186,17 @@ export function Investments() {
             {data.missing_price > 0 && (
               <p className="muted">{data.missing_price} posiciones sin precio no suman en el total.</p>
             )}
+            <h3>Valor en el tiempo</h3>
+            <History currency={currency} />
             <h3>Distribución</h3>
             <Allocation portfolio={data} />
             <h3>Posiciones</h3>
             <Positions portfolio={data} currency={currency} />
+            <p className="muted small">
+              La ganancia se calcula con costo promedio sobre las compras importadas. «Parcial» indica que
+              parte de la tenencia es anterior al primer resumen de movimientos importado: importando
+              resúmenes más viejos se completa.
+            </p>
           </>
         )}
       </Section>
