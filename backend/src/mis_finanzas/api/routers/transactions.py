@@ -7,6 +7,7 @@ from sqlalchemy import Select, func, select
 from mis_finanzas.api.common import get_or_404
 from mis_finanzas.api.deps import SessionDep
 from mis_finanzas.api.schemas import (
+    ExchangeCandidateOut,
     TransactionOut,
     TransactionPage,
     TransactionPatch,
@@ -15,8 +16,19 @@ from mis_finanzas.api.schemas import (
 )
 from mis_finanzas.core.money import from_cents
 from mis_finanzas.ledger.categorize import set_category
+from mis_finanzas.ledger.exchanges import (
+    ExchangeCandidate,
+    find_exchange_candidates,
+    link_exchange,
+)
 from mis_finanzas.ledger.models import Category, Transaction, TransactionKind
-from mis_finanzas.ledger.transfers import find_transfer_candidates, link_transfer, unlink_transfer
+from mis_finanzas.ledger.transfers import (
+    TransferCandidate,
+    find_transfer_candidates,
+    link_transfer,
+    unlink_transfer,
+)
+from mis_finanzas.market.fx import RateTable, load_rate_table
 
 router = APIRouter(tags=["transactions"])
 
@@ -92,21 +104,35 @@ def update_transaction(tx_id: int, body: TransactionPatch, session: SessionDep) 
     return to_out(tx)
 
 
-@router.get("/transfers/candidates", response_model=list[TransferCandidateOut])
-def transfer_candidates(session: SessionDep) -> list[TransferCandidateOut]:
-    """Unlinked opposite-amount pairs across accounts. Nothing changes until confirmed."""
+def _transfer_candidates(session: SessionDep) -> list[TransferCandidate]:
     unpaired = session.scalars(
         select(Transaction).where(
             Transaction.transfer_pair_id.is_(None),
             Transaction.kind.in_([TransactionKind.INCOME, TransactionKind.EXPENSE]),
         )
     ).unique()
+    return find_transfer_candidates(list(unpaired))
+
+
+@router.get("/transfers/candidates", response_model=list[TransferCandidateOut])
+def transfer_candidates(session: SessionDep) -> list[TransferCandidateOut]:
+    """Unlinked opposite-amount pairs across accounts. Nothing changes until confirmed."""
     return [
         TransferCandidateOut(
             outgoing=to_out(c.outgoing), incoming=to_out(c.incoming), days_apart=c.days_apart
         )
-        for c in find_transfer_candidates(list(unpaired))
+        for c in _transfer_candidates(session)
     ]
+
+
+@router.post("/transfers/all")
+def link_all_transfers(session: SessionDep) -> dict[str, int]:
+    """Confirm every current suggestion; returns how many transfers were linked."""
+    found = _transfer_candidates(session)
+    for candidate in found:
+        link_transfer(candidate.outgoing, candidate.incoming)
+    session.commit()
+    return {"linked": len(found)}
 
 
 @router.post("/transfers", status_code=status.HTTP_204_NO_CONTENT)
@@ -128,3 +154,49 @@ def unlink(tx_id: int, session: SessionDep) -> None:
     pair = session.get(Transaction, tx.transfer_pair_id) if tx.transfer_pair_id else None
     unlink_transfer(tx, pair)
     session.commit()
+
+
+def _exchange_candidates(session: SessionDep) -> tuple[list[ExchangeCandidate], RateTable]:
+    sides = session.scalars(
+        select(Transaction).where(
+            Transaction.transfer_pair_id.is_(None), Transaction.kind == TransactionKind.FX
+        )
+    ).unique()
+    rates = load_rate_table(session)
+    return find_exchange_candidates(list(sides), rates.rate_on), rates
+
+
+@router.get("/exchanges/candidates", response_model=list[ExchangeCandidateOut])
+def exchange_candidates(session: SessionDep) -> list[ExchangeCandidateOut]:
+    """Same-day pairs of currency-exchange movements, to link as one exchange each."""
+    found, rates = _exchange_candidates(session)
+    return [
+        ExchangeCandidateOut(
+            outgoing=to_out(c.outgoing),
+            incoming=to_out(c.incoming),
+            rate=c.rate,
+            mep=rates.rate_on(c.outgoing.date),
+        )
+        for c in found
+    ]
+
+
+@router.post("/exchanges", status_code=status.HTTP_204_NO_CONTENT)
+def link_one_exchange(body: TransferLinkIn, session: SessionDep) -> None:
+    outgoing = get_or_404(session, Transaction, body.outgoing_id)
+    incoming = get_or_404(session, Transaction, body.incoming_id)
+    try:
+        link_exchange(outgoing, incoming)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    session.commit()
+
+
+@router.post("/exchanges/all")
+def link_all_exchanges(session: SessionDep) -> dict[str, int]:
+    """Link every current candidate; returns how many exchanges were linked."""
+    found, _ = _exchange_candidates(session)
+    for candidate in found:
+        link_exchange(candidate.outgoing, candidate.incoming)
+    session.commit()
+    return {"linked": len(found)}

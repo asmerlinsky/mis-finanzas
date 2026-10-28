@@ -611,6 +611,68 @@ Notes from implementing it:
   followed by the Visa PDF of the same month. The second showed "0 movimientos nuevos, 7 ya
   importados", was skipped, and the batch closed with its summary.
 
+## Follow-up — Invoices from PDFs, and their payments (M) — done
+
+- [x] **A PDF alone creates its invoice** when Mis Comprobantes doesn't have it yet.
+  - It's marked `source = "pdf"`, with type, number, date, currency, the printed exchange rate,
+    total, CAE and receiver (`Señor(es)`).
+  - A dollar invoice needs its printed rate, which is a check.
+  - A later export confirms it in place (same key) and keeps the PDF.
+  - The Monotributo page warns while any invoice is "solo PDF", since the 12-month total
+    depends on having them all.
+  - A PDF of an invoice already known must still agree on total, date and CAE.
+- [x] **Payments:** `monotributo/payments.py`, migration 0012 (`invoices.payment_transaction_id`,
+  unique).
+  - Candidates are credits in the invoice's currency, from 15 days before the issue date to
+    90 after. Transfers between own accounts, FX and investment movements are left out, and so
+    are credits already linked to another invoice. Credit notes are never matched.
+  - Suggestions are exact amounts, oldest invoice first, closest date.
+  - "Elegir movimiento" lists every candidate, any amount.
+  - Linking sets the movement's category to "Facturación" (income) when it had none.
+  - The owner confirms each link: the owner chose suggestions over automatic linking, and
+    payments arrive with exact amounts (USD from abroad for Factura E, pesos for Factura C).
+- Checked in headless Chrome: a PDF alone created its invoice ("solo PDF" note shown); the
+  exact USD credit was suggested over a 2.975 one; "Confirmar" linked it.
+
+## Follow-up — Monotributo projection (S) — done
+
+- [x] **The next 6 months, starting with this one** (`monotributo/status.py::project`).
+  - Each month invoices last month's amount, in the latest invoice's currency, at that
+    invoice's rate.
+  - This month counts as at least the projection, so nothing already invoiced is counted
+    twice.
+  - Each month shows its rolling 12-month total, its share of the cap and its warning level,
+    plus the first month over the cap and the category the next recategorization would imply.
+- [x] **The owner's own amount** (`PUT /api/monotributo/projection`, `DELETE` to go back to
+  last month's invoicing), stored on the profile (migration 0013).
+- [x] **Asking:** while an own amount is set and last month's invoicing differs from it, the
+  page asks to use last month's amount or keep the own one. The answer is remembered for that
+  month (`projection_reviewed`).
+- Checked in headless Chrome with five invented monthly USD invoices: the rolling totals, the
+  over-the-cap warning, the implied category E, and saving an own amount.
+
+## Follow-up — Currency exchanges (S) — done
+
+- Santander settles dollar sales through bonds as `Liquidacion titulos debito` (dollars out of
+  CA dólares) and `Liquidacion titulos publicos credi` (pesos into CA pesos), on the same day.
+  Counted by sign, they inflated both expenses and income.
+- [x] Migration 0014:
+  - seeds "Cambio de moneda" (kind `fx`) with a rule for each wording;
+  - categorizes the existing uncategorized movements that match, so they leave the totals at
+    once.
+- [x] `ledger/exchanges.py`: pairs same-day `fx` movements in two currencies, out and in.
+  - The pairs closest to the day's MEP are taken first; none more than 10% off.
+  - A sale settled in several debits stays unpaired, still out of the totals.
+  - Linking uses `transfer_pair_id` but keeps kind `fx` and the category.
+  - Unlinking now restores the kind from the category, so a transfer goes back by sign and an
+    exchange stays `fx`.
+- [x] API `GET /exchanges/candidates`, `POST /exchanges`, `POST /exchanges/all`.
+- [x] Movimientos shows "Posibles cambios de moneda": each pair's rate next to that day's MEP,
+  "Vincular" and "Vincular todos".
+- Tests use invented movements.
+- **To confirm on real data:** the owner opens Movimientos after the update and checks the
+  proposed exchanges and their rates.
+
 ## Verification (per phase)
 
 - `just test` and `just check` pass. Every parser has a synthetic fixture test covering:

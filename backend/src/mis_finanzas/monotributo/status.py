@@ -108,3 +108,82 @@ def monthly_totals(invoices: Iterable[tuple[date, Decimal]]) -> list[tuple[str, 
         key = day.strftime("%Y-%m")
         months[key] = months.get(key, Decimal(0)) + ars
     return sorted(months.items())
+
+
+PROJECTION_MONTHS = 6
+
+
+@dataclass(frozen=True)
+class ProjectedMonth:
+    month: str  # "YYYY-MM"
+    invoiced: Decimal  # pesos: what's invoiced so far, or the projection where that's more
+    rolling: Decimal  # the 12 months ending with this month
+    usage: Decimal | None  # rolling / the current category's cap
+    level: Decimal | None
+
+
+@dataclass(frozen=True)
+class Projection:
+    monthly: Decimal  # pesos per month
+    months: list[ProjectedMonth]
+    first_over: str | None  # the first month over the cap, if any
+    recategorization_income: Decimal  # the next recategorization's months, projected
+    implied: Category | None
+
+
+def _month_starts(today: date, count: int) -> list[date]:
+    starts, year, month = [], today.year, today.month
+    for _ in range(count):
+        starts.append(date(year, month, 1))
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    return starts
+
+
+def _month_end(start: date) -> date:
+    following = _month_starts(start, 2)[1]
+    return following - timedelta(days=1)
+
+
+def _projected_invoices(
+    invoices: list[tuple[date, Decimal]], monthly: Decimal, today: date
+) -> list[tuple[date, Decimal]]:
+    """Each projected month as one invoice on its last day. This month counts as at least
+    `monthly`: what's invoiced in it so far stays, and only the rest is projected."""
+    projected = []
+    for start in _month_starts(today, PROJECTION_MONTHS):
+        so_far = sum((ars for day, ars in invoices if start <= day <= today), Decimal(0))
+        this_month = start == today.replace(day=1)
+        extra = max(Decimal(0), monthly - so_far) if this_month else monthly
+        projected.append((_month_end(start), extra))
+    return projected
+
+
+def project(
+    invoices: list[tuple[date, Decimal]],
+    table: CategoryTable,
+    letter: str | None,
+    today: date,
+    monthly: Decimal,
+) -> Projection:
+    """The next `PROJECTION_MONTHS` months (this one first), each invoicing `monthly` pesos."""
+    actual = [(day, ars) for day, ars in invoices if day <= today]
+    combined = actual + _projected_invoices(actual, monthly, today)
+    category = table.get(letter) if letter else None
+    months = []
+    for start in _month_starts(today, PROJECTION_MONTHS):
+        end = _month_end(start)
+        rolling = Window(year_before(end) + timedelta(days=1), end).total(combined)
+        usage = rolling / category.annual_cap if category else None
+        months.append(
+            ProjectedMonth(
+                month=start.strftime("%Y-%m"),
+                invoiced=Window(start, end).total(combined),
+                rolling=rolling,
+                usage=usage,
+                level=warning_level(usage) if usage is not None else None,
+            )
+        )
+    _, window = next_recategorization_window(today)
+    income = window.total(combined)
+    over = next((m.month for m in months if m.level is not None and m.level >= 1), None)
+    return Projection(monthly, months, over, income, table.for_income(income))

@@ -1,6 +1,7 @@
 """ARCA "Mis Comprobantes - Emitidos" CSV export: every invoice issued, history included.
 
-**What is read:** one header row (`;`-separated) and one invoice per row. Columns are found
+**What is read:** one header row (`;`-separated, names and values usually quoted) and one
+invoice per row. Columns are found
 **by header name**, not position, so columns ARCA adds later don't matter. Amounts use a comma
 decimal and are in the invoice's currency; `Tipo Cambio` converts them to pesos.
 
@@ -14,6 +15,7 @@ decimal and are in the invoice's currency; `Tipo Cambio` converts them to pesos.
 
 import csv
 import io
+import re
 from datetime import date
 from decimal import Decimal
 
@@ -52,8 +54,17 @@ CURRENCIES = {"PES": "ARS", "ARS": "ARS", "$": "ARS", "DOL": "USD", "USD": "USD"
 
 
 def _header(text: str) -> list[str]:
+    """The first line's column names. ARCA quotes them (`"Fecha de Emisión";…`)."""
     first = text.splitlines()[0] if text else ""
-    return [name.strip() for name in first.split(";")]
+    return [name.strip() for name in next(csv.reader([first], delimiter=";"), [])]
+
+
+def _type_code(text: str) -> int:
+    """`11`, or `11 - Factura C` should the type print with its name. Raises `ValueError`."""
+    match = re.match(r"\s*(\d+)", text)
+    if match is None:
+        raise ValueError("unreadable comprobante type")
+    return int(match.group(1))
 
 
 def _amount(text: str) -> Decimal:
@@ -62,7 +73,7 @@ def _amount(text: str) -> Decimal:
 
 def _invoice(line_number: int, row: dict[str, str]) -> ParsedInvoice:
     """Raises `ValueError` for a row that can't be read or doesn't add up."""
-    type_code = int(row["Tipo de Comprobante"])
+    type_code = _type_code(row["Tipo de Comprobante"])
     if type_code not in INVOICE_TYPES:
         raise ValueError(f"comprobante type {type_code} is not supported")
     currency = CURRENCIES.get(row["Moneda"].strip().upper())

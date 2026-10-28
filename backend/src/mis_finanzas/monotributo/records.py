@@ -65,6 +65,8 @@ class ParsedInvoicePdf:
     currency: str
     total: Decimal
     cae: str
+    fx_rate: Decimal | None = None  # `Tipo de Cambio`, when printed
+    receiver_name: str = ""  # `Señor(es)`
 
 
 @dataclass

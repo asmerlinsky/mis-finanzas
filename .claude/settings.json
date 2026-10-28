@@ -26,6 +26,13 @@
       "Bash(git checkout*)"
     ],
     "deny": [
+      "Read(~/.local/share/mis-finanzas/**)",
+      "Edit(~/.local/share/mis-finanzas/**)",
+      "Read(./data/**)",
+      "Read(./backups/**)",
+      "Bash(*.local/share/mis-finanzas*)",
+      "Bash(*finanzas.db*)",
+      "Bash(sqlite3*)",
       "Bash(rm -rf*)",
       "Bash(git commit*)",
       "Bash(git push --force*)",

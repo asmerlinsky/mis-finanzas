@@ -58,13 +58,25 @@ export function suggestedAccount(target: string): AccountInput {
   return { name, institution: INSTITUTIONS[institution] ?? institution, kind: kindFor(institution, product), currency }
 }
 
+/** Why the failed checks block the import, in the words that fit the file. */
+function failedChecksReason(preview: Preview): string {
+  if (preview.importer === 'arca_invoice_pdf') {
+    if (preview.invoices?.pdf_creates) {
+      return (
+        'No se pudo leer el tipo de cambio del PDF, que hace falta para cargar una factura en ' +
+        'dólares sin Mis Comprobantes.'
+      )
+    }
+    return 'El PDF no coincide con su comprobante de Mis Comprobantes (ver lo marcado con ✗).'
+  }
+  return 'Los totales del resumen no coinciden con lo leído, así que no se importa.'
+}
+
 /** Why the import can't run yet; empty when it can. */
 export function blockers(preview: Preview, skipInvalid: boolean, importable: number): string[] {
   const reasons: string[] = []
   if (preview.already_imported) reasons.push('Este archivo ya fue importado.')
-  if (preview.checks.some((c) => !c.ok)) {
-    reasons.push('Los totales del resumen no coinciden con lo leído, así que no se importa.')
-  }
+  if (preview.checks.some((c) => !c.ok)) reasons.push(failedChecksReason(preview))
   if (preview.unmapped_targets.length > 0) {
     reasons.push('Elegí una cuenta para cada parte del resumen.')
   }

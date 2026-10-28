@@ -41,6 +41,29 @@ def test_export_is_read_by_column_name() -> None:
     assert result.metadata == {"periodo": "10/03/2026 - 10/05/2026"}
 
 
+def test_arca_download_with_quoted_names_and_values() -> None:
+    """ARCA's own CSV quotes every column name and value."""
+    importer = MisComprobantesCsv()
+    content = comprobantes_csv(DEFAULT_ROWS, quoted=True)
+    assert importer.detect("comprobantes.csv", content)
+    result = importer.parse(content, "comprobantes.csv")
+    assert result.errors == []
+    assert result.invoices is not None
+    assert [(i.key.type_code, i.key.number) for i in result.invoices.invoices] == [
+        (19, 7),
+        (11, 3),
+        (21, 2),
+    ]
+
+
+def test_type_with_its_name_is_read() -> None:
+    row = invoice_row("2026-03-10", 19, 9, "100,00")
+    row[1] = "11 - Factura C"
+    result = MisComprobantesCsv().parse(comprobantes_csv([row], quoted=True), "c.csv")
+    assert result.errors == [] and result.invoices is not None
+    assert result.invoices.invoices[0].key.type_code == 11
+
+
 @pytest.mark.parametrize(
     ("row", "message"),
     [
@@ -70,7 +93,8 @@ def test_invoice_pdf_is_read_from_page_1() -> None:
         Decimal("3000.00"),
     )
     assert result.metadata == {"comprobante": "Factura E 00001-00000007", "fecha": "10/03/2026"}
-    assert "CLIENTE" not in repr(result).upper()  # the receiver is never read
+    # Read so that the PDF can create its invoice when the export doesn't have it yet.
+    assert (pdf.fx_rate, pdf.receiver_name) == (Decimal("1000.000000"), "Cliente Ejemplo SRL")
 
 
 def test_invoice_pdf_code_must_match_title_and_letter() -> None:
@@ -97,6 +121,7 @@ def test_newer_export_updates_and_adds(client: TestClient) -> None:
         "new": 1,
         "changed": ["Nota de Crédito E 00001-00000002"],
         "pdf_for": None,
+        "pdf_creates": False,
     }
     assert _upload(client, "/api/imports", "c2.csv", comprobantes_csv(newer)).status_code == 201
     listed = client.get("/api/monotributo/invoices").json()
@@ -108,21 +133,36 @@ def test_newer_export_updates_and_adds(client: TestClient) -> None:
     ]
 
 
-def test_pdf_attaches_only_to_its_invoice(client: TestClient) -> None:
+def test_pdf_alone_creates_its_invoice_and_the_export_confirms_it(client: TestClient) -> None:
     preview = _upload(client, "/api/imports/preview", "f.pdf", invoice_pdf()).json()
     assert preview["importer"] == "arca_invoice_pdf"
-    assert [c["name"] for c in preview["checks"] if not c["ok"]] == [
-        "comprobante en Mis Comprobantes"
-    ]
-    assert _upload(client, "/api/imports", "f.pdf", invoice_pdf()).status_code == 409
+    assert preview["invoices"]["pdf_creates"] is True
+    assert [c["name"] for c in preview["checks"] if not c["ok"]] == []
+    assert _upload(client, "/api/imports", "f.pdf", invoice_pdf()).status_code == 201
+    [created] = client.get("/api/monotributo/invoices").json()
+    assert (created["source"], created["has_pdf"], created["total_ars"]) == (
+        "pdf",
+        True,
+        "3000000.00",
+    )
+    assert created["receiver_name"] == "Cliente Ejemplo SRL"
+    # The export takes over the same invoice: confirmed, PDF still attached, no duplicate.
+    _upload(client, "/api/imports", "c.csv", comprobantes_csv(DEFAULT_ROWS))
+    listed = client.get("/api/monotributo/invoices").json()
+    [confirmed] = [i for i in listed if i["number"] == "00001-00000007"]
+    assert (confirmed["source"], confirmed["has_pdf"], len(listed)) == ("export", True, 3)
+    response = client.get(f"/api/monotributo/invoices/{confirmed['id']}/pdf")
+    assert response.status_code == 200 and response.content.startswith(b"%PDF")
+
+
+def test_pdf_of_a_known_invoice_must_agree_with_it(client: TestClient) -> None:
     _upload(client, "/api/imports", "c.csv", comprobantes_csv(DEFAULT_ROWS))
     wrong = invoice_pdf(total="USD 3100,00")
-    failed = _upload(client, "/api/imports/preview", "g.pdf", wrong).json()["checks"]
-    assert [c["name"] for c in failed if not c["ok"]] == ["importe total"]
+    preview = _upload(client, "/api/imports/preview", "g.pdf", wrong).json()
+    assert preview["invoices"]["pdf_creates"] is False
+    assert [c["name"] for c in preview["checks"] if not c["ok"]] == ["importe total"]
+    assert _upload(client, "/api/imports", "g.pdf", wrong).status_code == 409
     assert _upload(client, "/api/imports", "f.pdf", invoice_pdf()).status_code == 201
-    [invoice] = [i for i in client.get("/api/monotributo/invoices").json() if i["has_pdf"]]
-    response = client.get(f"/api/monotributo/invoices/{invoice['id']}/pdf")
-    assert response.status_code == 200 and response.content.startswith(b"%PDF")
 
 
 def test_category_is_validated_and_shown_in_status(client: TestClient) -> None:

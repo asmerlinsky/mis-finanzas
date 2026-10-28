@@ -22,6 +22,9 @@ const ACCEPTED = '.csv,.txt,.tsv,.xlsx,.xlsm,.pdf'
 function committedMessage(batch: ImportBatch, preview: Preview | undefined): string {
   if (preview && preview.rows.length === 0) {
     const invoices = preview.invoices
+    if (invoices?.pdf_for && invoices.pdf_creates) {
+      return `${invoices.pdf_for} cargado desde su PDF; se confirma al importar Mis Comprobantes.`
+    }
     if (invoices?.pdf_for) return `PDF adjuntado a ${invoices.pdf_for}.`
     if (invoices) {
       return `Comprobantes importados: ${invoices.new} nuevos, ${invoices.changed.length} actualizados.`

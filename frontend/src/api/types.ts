@@ -76,6 +76,16 @@ export interface TransferCandidate {
   days_apart: number
 }
 
+/** Two sides of a currency exchange between own accounts, on one day. */
+export interface ExchangeCandidate {
+  outgoing: Transaction
+  incoming: Transaction
+  /** Pesos per dollar it implies. */
+  rate: string
+  /** That day's MEP sell rate, to compare. */
+  mep: string | null
+}
+
 export interface TabularMapping {
   header_row: number
   delimiter: string | null
@@ -239,6 +249,8 @@ export interface InvoiceSummary {
   new: number
   changed: string[]
   pdf_for: string | null
+  /** No invoice matches the PDF yet: importing it creates the invoice. */
+  pdf_creates: boolean
 }
 
 export interface MonotributoCategory {
@@ -268,6 +280,26 @@ export interface MonotributoStatus {
     implied: MonotributoCategory | null
   }
   monthly: { month: string; ars: string }[]
+  projection: MonotributoProjection
+}
+
+/** The next 6 months, each invoicing `amount` (this month first). */
+export interface MonotributoProjection {
+  amount: string
+  currency: Currency
+  /** Pesos per unit, from the latest invoice in that currency. */
+  rate: string
+  /** The owner's own amount; otherwise last month's invoicing. */
+  manual: boolean
+  last_month: string
+  last_month_amount: string
+  /** Last month differs from the owner's amount: ask whether to update it. */
+  ask: boolean
+  monthly_ars: string
+  months: { month: string; invoiced: string; rolling: string; usage: string | null; level: string | null }[]
+  first_over: string | null
+  recategorization_income: string
+  implied: MonotributoCategory | null
 }
 
 export interface Invoice {
@@ -283,6 +315,23 @@ export interface Invoice {
   /** Signed: credit notes subtract. */
   total_ars: string
   has_pdf: boolean
+  /** `pdf`: known from its PDF alone, until a Mis Comprobantes export confirms it. */
+  source: 'export' | 'pdf'
+  payment: InvoicePayment | null
+  /** The likely payment, to confirm. */
+  suggestion: InvoicePayment | null
+}
+
+/** A movement that paid, or may have paid, an invoice. */
+export interface InvoicePayment {
+  transaction_id: number
+  date: string
+  amount: string
+  currency: Currency
+  account_name: string
+  description: string
+  /** The invoice total, to the cent. */
+  exact: boolean
 }
 
 export interface AuthStatus {

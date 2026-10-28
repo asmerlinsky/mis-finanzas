@@ -8,6 +8,7 @@ import type {
   Account,
   AuthStatus,
   Category,
+  ExchangeCandidate,
   CategoryTotal,
   ImportBatch,
   Invoice,
@@ -62,6 +63,12 @@ export const useTransferCandidates = () =>
   useQuery({
     queryKey: ['transfer-candidates'],
     queryFn: () => api<TransferCandidate[]>('/transfers/candidates'),
+  })
+
+export const useExchangeCandidates = () =>
+  useQuery({
+    queryKey: ['exchange-candidates'],
+    queryFn: () => api<ExchangeCandidate[]>('/exchanges/candidates'),
   })
 
 export const useMonthly = (start: string, end: string) =>

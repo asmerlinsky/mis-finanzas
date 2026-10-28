@@ -29,6 +29,12 @@ const STATUS: MonotributoStatus = {
     implied: CATEGORIES[0],
   },
   monthly: [{ month: '2026-03', ars: '900000' }],
+  projection: {
+    amount: '900', currency: 'USD', rate: '1000', manual: false, last_month: '2026-09',
+    last_month_amount: '900', ask: false, monthly_ars: '900000',
+    months: [{ month: '2026-10', invoiced: '900000', rolling: '1850000', usage: '0.925', level: '0.9' }],
+    first_over: null, recategorization_income: '1800000', implied: CATEGORIES[1],
+  },
 }
 
 const INVOICES: Invoice[] = [
@@ -36,6 +42,7 @@ const INVOICES: Invoice[] = [
     id: 1, type_code: 19, type_label: 'Factura E', number: '00001-00000007',
     issued_on: '2026-03-10', receiver_name: 'Cliente Ejemplo SRL', currency: 'USD',
     total: '900', fx_rate: '1000', total_ars: '900000', has_pdf: true,
+    source: 'pdf', payment: null, suggestion: null,
   },
 ]
 
@@ -68,6 +75,8 @@ describe('Monotributo', () => {
       'hasta el 05/02/2027',
     )
     expect(screen.getByText(/Próxima recategorización/)).toHaveTextContent('categoría A')
+    expect(screen.getByText(/1 comprobantes cargados solo desde el PDF/)).toBeInTheDocument()
+    expect(screen.getByText('solo PDF')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'ver' })).toHaveAttribute(
       'href',
       '/api/monotributo/invoices/1/pdf',
