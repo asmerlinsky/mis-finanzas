@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
-import { send, useAccounts, useApiMutation } from '../api/hooks'
-import type { Account, AccountInput, AccountKind, Currency } from '../api/types'
+import { send, sourceAccountPath, useAccounts, useApiMutation, useSourceAccounts } from '../api/hooks'
+import type { Account, AccountInput, AccountKind, Currency, SourceAccount } from '../api/types'
 import { Empty, ErrorNote, Section } from '../components/ui'
 import { ACCOUNT_KIND_LABELS } from '../lib/format'
 
@@ -50,8 +50,27 @@ function AccountForm({ existing, onDone }: { existing?: Account; onDone: () => v
   )
 }
 
+/** The statement parts imported into an account (e.g. `santander/CA/ARS`), each removable. */
+function Sources({ sources }: { sources: SourceAccount[] }) {
+  const unmap = useApiMutation((key: string) => send('DELETE', sourceAccountPath(key)))
+  if (sources.length === 0) return <span className="muted">—</span>
+  return (
+    <ul className="chips">
+      {sources.map((s) => (
+        <li key={s.key}>
+          <code>{s.key}</code>
+          <button className="link" aria-label={`Dejar de importar ${s.key}`} onClick={() => unmap.mutate(s.key)}>
+            ×
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export function Accounts() {
   const { data = [] } = useAccounts()
+  const { data: sources = [] } = useSourceAccounts()
   const [editing, setEditing] = useState<number | null>(null)
   const remove = useApiMutation((id: number) => send('DELETE', `/accounts/${id}`))
   return (
@@ -64,7 +83,7 @@ export function Accounts() {
           {data.map((account) =>
             editing === account.id ? (
               <tr key={account.id}>
-                <td colSpan={5}>
+                <td colSpan={6}>
                   <AccountForm existing={account} onDone={() => setEditing(null)} />
                 </td>
               </tr>
@@ -74,6 +93,9 @@ export function Accounts() {
                 <td>{account.institution}</td>
                 <td>{ACCOUNT_KIND_LABELS[account.kind]}</td>
                 <td>{account.currency}</td>
+                <td>
+                  <Sources sources={sources.filter((s) => s.account_id === account.id)} />
+                </td>
                 <td className="row-actions">
                   <button className="link" onClick={() => setEditing(account.id)}>
                     Editar
