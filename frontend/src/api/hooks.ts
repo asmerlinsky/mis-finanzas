@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, jsonBody, queryString } from './client'
 import type {
   Account,
+  AuthStatus,
   Category,
   CategoryTotal,
   ImportBatch,
@@ -85,6 +86,9 @@ export const useMonotributoStatus = () =>
 
 export const useInvoices = () =>
   useQuery({ queryKey: ['invoices'], queryFn: () => api<Invoice[]>('/monotributo/invoices') })
+
+export const useAuthStatus = () =>
+  useQuery({ queryKey: ['auth-status'], queryFn: () => api<AuthStatus>('/auth/status') })
 
 export const useMarketStatus = () =>
   useQuery({ queryKey: ['market-status'], queryFn: () => api<MarketStatus>('/market/status') })

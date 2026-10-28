@@ -1,5 +1,6 @@
 """Every table module, imported so `Base.metadata` is complete (for Alembic and tests)."""
 
+from mis_finanzas.auth import models as auth_models
 from mis_finanzas.core.db import Base
 from mis_finanzas.importers import models as importer_models
 from mis_finanzas.investments import models as investment_models
@@ -9,6 +10,7 @@ from mis_finanzas.monotributo import models as monotributo_models
 
 __all__ = [
     "Base",
+    "auth_models",
     "importer_models",
     "investment_models",
     "ledger_models",

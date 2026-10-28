@@ -284,3 +284,10 @@ export interface Invoice {
   total_ars: string
   has_pdf: boolean
 }
+
+export interface AuthStatus {
+  /** A password is set on the server. */
+  required: boolean
+  /** This browser may use the API. */
+  authenticated: boolean
+}

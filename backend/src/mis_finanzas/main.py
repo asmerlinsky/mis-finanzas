@@ -10,8 +10,10 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session, sessionmaker
 
+from mis_finanzas.api.auth_guard import AuthGuard
 from mis_finanzas.api.routers import (
     accounts,
+    auth,
     categories,
     imports,
     investments,
@@ -19,6 +21,8 @@ from mis_finanzas.api.routers import (
     reports,
     transactions,
 )
+from mis_finanzas.auth.service import LoginThrottle
+from mis_finanzas.core.backup import backed_up_on, run_backup
 from mis_finanzas.core.config import Settings, get_settings
 from mis_finanzas.core.db import make_engine, make_session_factory
 from mis_finanzas.core.logging import configure_logging
@@ -55,14 +59,39 @@ async def refresh_loop(settings: Settings, factory: sessionmaker[Session]) -> No
         await asyncio.sleep(REFRESH_CHECK_SECONDS)
 
 
+def run_daily_backup(settings: Settings) -> None:
+    """One backup attempt, unless today's copy exists. Failures are logged, then retried."""
+    if settings.backup_dir is None or backed_up_on(settings.backup_dir, date.today()):
+        return
+    try:
+        run_backup(
+            settings.db_path,
+            settings.uploads_dir,
+            settings.backup_dir,
+            date.today(),
+            settings.backup_keep_days,
+        )
+    except Exception as exc:
+        logger.error("Daily backup failed", extra={"error": str(exc)})
+
+
+async def backup_loop(settings: Settings) -> None:
+    """Hourly check; at most one backup a day."""
+    while True:
+        await asyncio.to_thread(run_daily_backup, settings)
+        await asyncio.sleep(REFRESH_CHECK_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
-    task = None
+    tasks = []
     if settings.market_refresh_on_startup:
-        task = asyncio.create_task(refresh_loop(settings, app.state.session_factory))
+        tasks.append(asyncio.create_task(refresh_loop(settings, app.state.session_factory)))
+    if settings.backup_dir is not None:
+        tasks.append(asyncio.create_task(backup_loop(settings)))
     yield
-    if task is not None:
+    for task in tasks:
         task.cancel()
 
 
@@ -75,7 +104,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="mis-finanzas", lifespan=lifespan)
     app.state.settings = settings
     app.state.session_factory = make_session_factory(make_engine(settings.database_url))
+    app.state.login_throttle = LoginThrottle()
+    app.add_middleware(AuthGuard)
     for module in (
+        auth,
         accounts,
         categories,
         transactions,

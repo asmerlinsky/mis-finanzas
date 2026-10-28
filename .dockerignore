@@ -1,0 +1,15 @@
+# Allowlist: only what the image needs. Statements (samples/), data folders, databases and
+# backups can never enter the build context.
+**
+!backend/pyproject.toml
+!backend/uv.lock
+!backend/src/**
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/index.html
+!frontend/public/**
+!frontend/src/**
+!frontend/tsconfig*.json
+!frontend/vite.config.ts
+**/__pycache__
+**/*.db
