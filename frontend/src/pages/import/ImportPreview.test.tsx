@@ -85,6 +85,27 @@ describe('ImportPreview', () => {
     expect(handlers.onCommit).toHaveBeenCalledWith({ skipLines: [], skipInvalid: false })
   })
 
+  it('imports a Mis Comprobantes export and lists what changes', async () => {
+    const handlers = setup(preview({
+      importer: 'arca_mis_comprobantes_csv', new_count: 0, targets: [], checks: [],
+      invoices: { invoices: 4, new: 1, changed: ['Nota de Crédito E 00001-00000002'], pdf_for: null },
+    }))
+    expect(screen.getByText(/comprobantes:/)).toHaveTextContent(
+      '4 comprobantes: 1 nuevos, 1 con cambios, 2 sin cambios. Cambian: Nota de Crédito E 00001-00000002.',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Importar comprobantes' }))
+    expect(handlers.onCommit).toHaveBeenCalled()
+  })
+
+  it('attaches an invoice PDF', () => {
+    setup(preview({
+      importer: 'arca_invoice_pdf', new_count: 0, targets: [], checks: [],
+      invoices: { invoices: 0, new: 0, changed: [], pdf_for: 'Factura E 00001-00000007' },
+    }))
+    expect(screen.getByText(/se adjunta a ese comprobante/)).toHaveTextContent('Factura E 00001-00000007')
+    expect(screen.getByRole('button', { name: 'Adjuntar PDF' })).toBeEnabled()
+  })
+
   it('shows already imported rows without a checkbox', () => {
     setup(preview({ new_count: 0, duplicate_count: 1, rows: [row(1, { duplicate: true })] }))
     expect(screen.getByText('ya importado')).toBeInTheDocument()

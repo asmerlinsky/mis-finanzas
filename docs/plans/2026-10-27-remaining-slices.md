@@ -408,57 +408,87 @@ Notes from implementing it:
 - **To confirm on real data:** the day after the first refresh, compare the page's total with
   Balanz's own valuation.
 
-## Phase 6 — Monotributo (M)
+## Phase 6 — Monotributo (M) — done
 
 New package `monotributo/`, importing `core` only. Invoices come from the Mis Comprobantes
 export; PDFs are attached to them.
 
-- [ ] **Model and migration:**
+Decisions taken when starting it (2026-10-28):
+- Both files go through the **existing import flow**, detected like the bank statements:
+  `ParseResult.invoices` carries the records, and `monotributo/store.py` writes them in the
+  import's transaction. That reuses the preview, checks, sha256 and stored original.
+- **Recategorization** (RG 5637/2025): deadlines 5 February and 5 August. February looks at
+  the 12 months ending 31 December, August at those ending 30 June. The plan's
+  "January/July" was the old calendar.
+- **Category table:** `monotributo/categories.json` starts with ARCA's table "de aplicación
+  desde el 1/08/2026" (services payment only).
+- A PDF matches its invoice on type, point of sale, number, issue date, total and CAE. The
+  exchange rate is not compared: the PDF prints 6 decimals, the export 2.
+- The profile holds the current category only.
+- The export's `Moneda` column reads `USD` in the sample. Both ARCA's codes (`PES`, `DOL`) and
+  ISO codes are accepted.
+
+- [x] **Model and migration:**
   - `Invoice(type_code, point_of_sale, number_from, number_to, issued_on, cae,
     receiver_doc_type, receiver_doc, receiver_name, currency, fx_rate, net_taxed,
     net_untaxed, exempt, other_taxes, vat, total, total_ars, import_batch_id, pdf_path)`.
   - Money is in cents; `fx_rate` uses `DecimalText`.
   - Unique key `(type_code, point_of_sale, number_from)`.
   - `total_ars = total × fx_rate`, negative for credit notes.
-- [ ] **`importers/arca/mis_comprobantes.py`** (pure):
+- [x] **`importers/arca/mis_comprobantes.py`** (pure):
   - Detection: the header has `Tipo de Comprobante`, `Punto de Venta`, `Cód. Autorización` and
     `Imp. Total`.
   - Columns are mapped **by header name**, not position, so ARCA adding columns doesn't break
     it.
   - Unknown type codes are row errors.
   - **Check per row:** `Imp. Total` = Σ components, otherwise it's a row error.
-- [ ] **Import service** (`monotributo/service.py`):
+- [x] **Import service** (`monotributo/service.py`):
   - Preview and commit, reusing the upload, sha256 and stored-original handling.
   - Re-importing a newer export updates existing invoices by the unique key, so the full
     history can be loaded again at any time. The preview lists rows whose fields changed.
-- [ ] **Invoice PDFs as attachments** (`importers/arca/invoice_pdf.py`):
+- [x] **Invoice PDFs as attachments** (`importers/arca/invoice_pdf.py`):
   - Reads only identity and totals from page 1: type from the title and letter, point of sale
     and number, date, currency, fx rate, `Importe Total`, CAE.
   - The upload links the stored PDF to the matching invoice.
   - **Check:** the PDF's total, rate and CAE must equal the invoice's, otherwise it's rejected.
   - A PDF with no matching invoice is rejected with "importá primero Mis Comprobantes".
-- [ ] **Categories:** a versioned seed file `monotributo/categories.json`.
+- [x] **Categories:** a versioned seed file `monotributo/categories.json`.
   - Fields: category letter, annual gross-income cap, monthly payment for services, and
     `valid_from`.
   - ARCA updates it twice a year; the owner edits the file.
   - The UI shows "tabla vigente desde …".
-- [ ] **Profile:** the owner's current category and activity (services), stored in a `profile`
+- [x] **Profile:** the owner's current category and activity (services), stored in a `profile`
   table and editable in the UI.
-- [ ] **Status** (`monotributo/status.py`, pure):
+- [x] **Status** (`monotributo/status.py`, pure):
   - rolling 12-month Σ `total_ars` against the current category's cap, and the margin left;
-  - the category implied by the last 12 months at the next recategorization (January/July);
+  - the category implied by the 12 months the next recategorization looks at;
   - warnings at 80%, 90% and 100%.
-- [ ] **API and UI:**
+- [x] **API and UI:**
   - `GET /api/monotributo/status`, `GET /api/monotributo/invoices`, plus the import endpoints;
   - a "Monotributo" page with the status card, a monthly invoicing chart (ARS, with USD as
     invoiced) and the invoice list with an "adjuntar PDF" button.
-- [ ] **Tests**, with synthetic data and invented receivers only:
+- [x] **Tests**, with synthetic data and invented receivers only:
   - CSV parsing (codes, credit-note sign, comma decimals, header-by-name, extra columns);
   - the total check;
   - updating existing invoices on re-import;
   - PDF identity extraction, from a synthetic PDF built with `tools/render_sample.build_pdf`;
   - PDF matching;
   - status math across a recategorization boundary.
+
+Notes from implementing it:
+- Parsers: `importers/arca/mis_comprobantes.py` and `importers/arca/invoice_pdf.py`. Records,
+  store, status and reads are in `monotributo/`. The API is `GET /api/monotributo/status`,
+  `GET /api/monotributo/invoices`, `GET /api/monotributo/invoices/{id}/pdf` and
+  `PUT /api/monotributo/profile`.
+- On the samples: the export's 5 rows fail the total check, as expected (edited `Imp. Total`).
+  The PDF reads as a Factura E, and only the `COD.` check fails (digits scrambled).
+- Checked in headless Chrome with synthetic files: import the export, attach a PDF, pick a
+  category; then the over-the-cap warning, the next recategorization, the monthly chart and
+  the invoice list with its PDF link. Light and dark mode.
+- **To confirm on real data:** import the real export (every row must pass the total check),
+  attach one real PDF (every check must pass), and compare the last-12-months total with
+  ARCA's own "Monotributo" summary.
+- Factura C PDFs are not in a sample; they are read by the same labels and may need a fix.
 
 ## Phase 7 — Home server readiness (M)
 

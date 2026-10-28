@@ -19,6 +19,7 @@ from mis_finanzas.importers.base import ImportFileError
 from mis_finanzas.importers.catalog import register_builtin_importers
 from mis_finanzas.importers.pdf_words import load_pages
 from mis_finanzas.investments.records import InvestmentData
+from mis_finanzas.monotributo.records import InvoiceData
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,7 @@ def check_sample(path: Path) -> bool:
             "checks_ok": sum(c.ok for c in result.checks),
             "checks_failed": [c.name for c in result.failed_checks],
             **_investment_counts(result.investments),
+            **_invoice_counts(result.invoices),
         },
     )
     return not result.errors and not result.failed_checks
@@ -69,6 +71,13 @@ def _investment_counts(data: InvestmentData | None) -> dict[str, int]:
         "positions": len(snapshot.positions) if snapshot else 0,
         "cash_lines": len(snapshot.cash) if snapshot else 0,
     }
+
+
+def _invoice_counts(data: InvoiceData | None) -> dict[str, int]:
+    """Counts only: receivers and amounts are the owner's clients and income."""
+    if data is None:
+        return {}
+    return {"invoices": len(data.invoices), "invoice_pdf": int(data.pdf is not None)}
 
 
 def _is_sample(path: Path) -> bool:

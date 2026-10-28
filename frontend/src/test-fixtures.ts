@@ -18,6 +18,7 @@ export function preview(overrides: Partial<Preview> = {}): Preview {
     rows: [],
     errors: [],
     investments: null,
+    invoices: null,
     ...overrides,
   }
 }

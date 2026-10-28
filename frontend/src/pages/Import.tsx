@@ -17,6 +17,22 @@ import { MappingForm } from './MappingForm'
 
 const ACCEPTED = '.csv,.txt,.tsv,.xlsx,.xlsm,.pdf'
 
+/** What a commit stored: ledger rows, or the records of a file that has none. */
+function committedMessage(batch: ImportBatch, preview: Preview | undefined): string {
+  if (preview && preview.rows.length === 0) {
+    const invoices = preview.invoices
+    if (invoices?.pdf_for) return `PDF adjuntado a ${invoices.pdf_for}.`
+    if (invoices) {
+      return `Comprobantes importados: ${invoices.new} nuevos, ${invoices.changed.length} actualizados.`
+    }
+    if (preview.investments) return 'Tenencias importadas.'
+  }
+  return (
+    `Importadas ${batch.rows_imported} filas (${batch.rows_duplicate} ya existían, ` +
+    `${batch.rows_skipped} omitidas).`
+  )
+}
+
 interface Mapped {
   target: string
   accountId: number
@@ -59,12 +75,7 @@ function Uploader({ mappingId }: { mappingId: number | null }) {
     <>
       <input type="file" accept={ACCEPTED} onChange={(e) => choose(e.target.files?.[0] ?? null)} />
       <ErrorNote error={preview.error ?? map.error ?? create.error ?? commit.error} />
-      {commit.data && (
-        <p className="success">
-          Importadas {commit.data.rows_imported} filas ({commit.data.rows_duplicate} ya existían,
-          {` ${commit.data.rows_skipped}`} omitidas).
-        </p>
-      )}
+      {commit.data && <p className="success">{committedMessage(commit.data, preview.data)}</p>}
       {preview.data && !commit.data && (
         <ImportPreview
           key={`${preview.data.filename}-${preview.data.unmapped_targets.join()}`}

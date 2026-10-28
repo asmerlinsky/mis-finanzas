@@ -6,12 +6,14 @@ import { Categories } from './pages/Categories'
 import { Dashboard } from './pages/Dashboard'
 import { Import } from './pages/Import'
 import { Investments } from './pages/Investments'
+import { Monotributo } from './pages/Monotributo'
 import { Transactions } from './pages/Transactions'
 
 const PAGES = {
   resumen: { label: 'Resumen', component: Dashboard },
   movimientos: { label: 'Movimientos', component: Transactions },
   inversiones: { label: 'Inversiones', component: Investments },
+  monotributo: { label: 'Monotributo', component: Monotributo },
   importar: { label: 'Importar', component: Import },
   cuentas: { label: 'Cuentas', component: Accounts },
   categorias: { label: 'Categorías', component: Categories },

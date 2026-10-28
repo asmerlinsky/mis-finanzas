@@ -9,10 +9,12 @@ import type {
   Category,
   CategoryTotal,
   ImportBatch,
+  Invoice,
   Mapping,
   MarketStatus,
   MonthAmount,
   MonthSummary,
+  MonotributoStatus,
   Portfolio,
   Rule,
   SourceAccount,
@@ -74,6 +76,15 @@ export const useDividends = (start: string, end: string) =>
     queryKey: ['dividends', start, end],
     queryFn: () => api<MonthAmount[]>(`/investments/dividends${queryString({ start, end })}`),
   })
+
+export const useMonotributoStatus = () =>
+  useQuery({
+    queryKey: ['monotributo-status'],
+    queryFn: () => api<MonotributoStatus>('/monotributo/status'),
+  })
+
+export const useInvoices = () =>
+  useQuery({ queryKey: ['invoices'], queryFn: () => api<Invoice[]>('/monotributo/invoices') })
 
 export const useMarketStatus = () =>
   useQuery({ queryKey: ['market-status'], queryFn: () => api<MarketStatus>('/market/status') })

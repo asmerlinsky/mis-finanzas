@@ -142,6 +142,7 @@ export interface Preview {
   rows: PreviewRow[]
   errors: { line_number: number; message: string }[]
   investments: InvestmentSummary | null
+  invoices: InvoiceSummary | null
 }
 
 /** What a broker statement adds besides ledger rows: operations and a holdings snapshot. */
@@ -230,4 +231,56 @@ export interface MonthAmount {
   ars: string
   usd: string
   missing_rate: number
+}
+
+/** What an ARCA file adds: invoices from Mis Comprobantes, or one invoice's PDF. */
+export interface InvoiceSummary {
+  invoices: number
+  new: number
+  changed: string[]
+  pdf_for: string | null
+}
+
+export interface MonotributoCategory {
+  letter: string
+  annual_cap: string
+  monthly_services: string
+}
+
+export interface MonotributoStatus {
+  today: string
+  table_valid_from: string
+  categories: MonotributoCategory[]
+  category: MonotributoCategory | null
+  window_start: string
+  window_end: string
+  income: string
+  usage: string | null
+  /** The highest warning level reached: "0.8", "0.9" or "1". */
+  level: string | null
+  margin: string | null
+  next: {
+    deadline: string
+    window_start: string
+    window_end: string
+    income: string
+    /** null: above the highest category. */
+    implied: MonotributoCategory | null
+  }
+  monthly: { month: string; ars: string }[]
+}
+
+export interface Invoice {
+  id: number
+  type_code: number
+  type_label: string
+  number: string
+  issued_on: string
+  receiver_name: string
+  currency: Currency
+  total: string
+  fx_rate: string
+  /** Signed: credit notes subtract. */
+  total_ars: string
+  has_pdf: boolean
 }

@@ -15,6 +15,7 @@ from mis_finanzas.api.routers import (
     categories,
     imports,
     investments,
+    monotributo,
     reports,
     transactions,
 )
@@ -74,7 +75,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="mis-finanzas", lifespan=lifespan)
     app.state.settings = settings
     app.state.session_factory = make_session_factory(make_engine(settings.database_url))
-    for module in (accounts, categories, transactions, imports, reports, investments):
+    for module in (
+        accounts,
+        categories,
+        transactions,
+        imports,
+        reports,
+        investments,
+        monotributo,
+    ):
         app.include_router(module.router, prefix="/api")
     if settings.frontend_dist is not None and settings.frontend_dist.is_dir():
         app.mount("/", StaticFiles(directory=settings.frontend_dist, html=True), name="frontend")

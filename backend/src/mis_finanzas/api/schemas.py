@@ -142,6 +142,15 @@ class InvestmentSummaryOut(BaseModel):
     replaces_snapshot: bool
 
 
+class InvoiceSummaryOut(BaseModel):
+    """What an ARCA file adds: invoices from Mis Comprobantes, or one invoice's PDF."""
+
+    invoices: int
+    new: int
+    changed: list[str]
+    pdf_for: str | None
+
+
 class PreviewOut(BaseModel):
     importer: str
     filename: str
@@ -156,6 +165,7 @@ class PreviewOut(BaseModel):
     rows: list[PreviewRowOut]
     errors: list[RowErrorOut]
     investments: InvestmentSummaryOut | None = None
+    invoices: InvoiceSummaryOut | None = None
 
 
 class SourceAccountIn(BaseModel):
@@ -247,3 +257,55 @@ class MonthAmountOut(BaseModel):
     ars: Decimal
     usd: Decimal
     missing_rate: int
+
+
+class MonotributoCategoryOut(BaseModel):
+    letter: str
+    annual_cap: Decimal
+    monthly_services: Decimal
+
+
+class RecategorizationOut(BaseModel):
+    deadline: date
+    window_start: date
+    window_end: date
+    income: Decimal
+    implied: MonotributoCategoryOut | None  # None: above the highest category
+
+
+class MonthAmountArsOut(BaseModel):
+    month: str
+    ars: Decimal
+
+
+class MonotributoStatusOut(BaseModel):
+    today: date
+    table_valid_from: date
+    categories: list[MonotributoCategoryOut]
+    category: MonotributoCategoryOut | None
+    window_start: date
+    window_end: date
+    income: Decimal
+    usage: Decimal | None
+    level: Decimal | None
+    margin: Decimal | None
+    next: RecategorizationOut
+    monthly: list[MonthAmountArsOut]
+
+
+class InvoiceOut(BaseModel):
+    id: int
+    type_code: int
+    type_label: str
+    number: str  # "00001-00000017"
+    issued_on: date
+    receiver_name: str
+    currency: str
+    total: Decimal
+    fx_rate: Decimal
+    total_ars: Decimal  # signed: credit notes subtract
+    has_pdf: bool
+
+
+class ProfileIn(BaseModel):
+    category: str

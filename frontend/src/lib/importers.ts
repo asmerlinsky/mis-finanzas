@@ -10,6 +10,8 @@ const IMPORTER_LABELS: Record<string, string> = {
   mercadopago_account_csv: 'Mercado Pago · resumen de cuenta (CSV)',
   balanz_movements_pdf: 'Balanz · cuenta corriente (PDF)',
   balanz_holdings_pdf: 'Balanz · posición consolidada (PDF)',
+  arca_mis_comprobantes_csv: 'ARCA · Mis Comprobantes emitidos (CSV)',
+  arca_invoice_pdf: 'ARCA · comprobante (PDF)',
 }
 
 const INSTITUTIONS: Record<string, string> = {
@@ -65,7 +67,8 @@ export function blockers(preview: Preview, skipInvalid: boolean, importable: num
     reasons.push('Elegí una cuenta para cada parte del resumen.')
   }
   if (preview.errors.length > 0 && !skipInvalid) reasons.push('Hay filas con errores.')
-  // A broker statement always has investment data to store, even with no new movements.
-  if (importable === 0 && !preview.investments) reasons.push('No hay movimientos nuevos para importar.')
+  // Broker statements and ARCA files store their own records, even with no movements.
+  const records = preview.investments !== null || preview.invoices !== null
+  if (importable === 0 && !records) reasons.push('No hay movimientos nuevos para importar.')
   return reasons
 }
