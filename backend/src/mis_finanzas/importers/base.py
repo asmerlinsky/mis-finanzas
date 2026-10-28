@@ -5,6 +5,7 @@ from datetime import date
 from decimal import Decimal
 
 from mis_finanzas.investments.records import InvestmentData
+from mis_finanzas.monotributo.records import InvoiceData
 
 # The single target of a generic (column-mapping) import: its mapping names the account.
 DEFAULT_TARGET = "default"
@@ -56,6 +57,8 @@ class ParseResult:
     metadata: dict[str, str] = field(default_factory=dict)
     # Broker statements: operations and holdings, stored next to the ledger rows.
     investments: InvestmentData | None = None
+    # ARCA files: issued invoices, or one invoice's PDF.
+    invoices: InvoiceData | None = None
 
     @property
     def failed_checks(self) -> list[Check]:

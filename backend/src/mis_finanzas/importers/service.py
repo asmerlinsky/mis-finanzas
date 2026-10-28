@@ -10,7 +10,8 @@ while a statement total doesn't match, a target has no account, or rows have err
 explicitly skipped); it writes everything in one transaction or nothing.
 
 A broker statement also carries investment data (operations, a holdings snapshot), written
-by `investments.store` in the same transaction. A holdings statement has no ledger rows.
+by `investments.store` in the same transaction; ARCA files carry invoices or an invoice's PDF,
+written by `monotributo.store`. Such files may have no ledger rows at all.
 """
 
 import hashlib
@@ -48,6 +49,8 @@ from mis_finanzas.ledger.models import (
 )
 from mis_finanzas.ledger.rules import first_matching_rule, infer_kind
 from mis_finanzas.ledger.text import normalize_description
+from mis_finanzas.monotributo import store as invoice_store
+from mis_finanzas.monotributo.records import InvoiceData
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +94,13 @@ class ImportPreview:
     metadata: dict[str, str] = field(default_factory=dict)
     investments: investment_store.InvestmentSummary | None = None
     investment_data: InvestmentData | None = None
+    invoices: invoice_store.InvoiceSummary | None = None
+    invoice_data: InvoiceData | None = None
+
+    @property
+    def has_records(self) -> bool:
+        """Something to store besides ledger rows."""
+        return self.investment_data is not None or self.invoice_data is not None
 
     @property
     def new_rows(self) -> list[PreviewRow]:
@@ -248,6 +258,12 @@ def build_preview(
     sha256 = hashlib.sha256(content).hexdigest()
     batch = session.scalar(select(ImportBatch.id).where(ImportBatch.file_sha256 == sha256))
     data = parsed.result.investments
+    invoices = parsed.result.invoices
+    invoice_summary = invoice_store.summarize(session, invoices) if invoices else None
+    pdf_checks = [
+        Check(c.name, c.expected, c.actual)
+        for c in (invoice_summary.comparisons if invoice_summary else [])
+    ]
     return ImportPreview(
         importer=parsed.importer,
         importer_version=parsed.version,
@@ -257,10 +273,12 @@ def build_preview(
         target_accounts=parsed.target_accounts,
         rows=prepare_rows(session, parsed.result.rows, parsed.target_accounts),
         errors=parsed.result.errors,
-        checks=parsed.result.checks,
+        checks=[*parsed.result.checks, *pdf_checks],
         metadata=parsed.result.metadata,
         investments=investment_store.summarize(session, data) if data else None,
         investment_data=data,
+        invoices=invoice_summary,
+        invoice_data=invoices,
     )
 
 
@@ -282,7 +300,7 @@ def _check_committable(
     unknown = skip_lines - {r.line_number for r in preview.rows}
     if unknown:
         raise ImportRejectedError(f"lines to skip are not rows of this file: {sorted(unknown)}")
-    if not preview.rows and preview.investment_data is None:
+    if not preview.rows and not preview.has_records:
         raise ImportRejectedError("the file has no rows to import")
 
 
@@ -332,6 +350,8 @@ def commit_import(
     session.add_all(_to_transaction(batch.id, row) for row in to_write)
     if preview.investment_data is not None:
         investment_store.store(session, batch.id, preview.investment_data)
+    if preview.invoice_data is not None:
+        invoice_store.store(session, batch.id, preview.invoice_data)
     session.commit()
     logger.info(
         "Import committed",

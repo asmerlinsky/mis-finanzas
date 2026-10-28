@@ -1,0 +1,21 @@
+{
+  "_comment": "ARCA's monotributo categories. ARCA updates the table in February and August: add a new entry with its valid_from, keep the old ones. Source: https://www.arca.gob.ar/monotributo/categorias.asp (column 'Total, Locaciones y prestaciones de servicios').",
+  "tables": [
+    {
+      "valid_from": "2026-08-01",
+      "categories": [
+        {"letter": "A", "annual_cap": "12009410.45", "monthly_services": "49527.18"},
+        {"letter": "B", "annual_cap": "17595182.74", "monthly_services": "56379.08"},
+        {"letter": "C", "annual_cap": "24670494.31", "monthly_services": "66020.12"},
+        {"letter": "D", "annual_cap": "30628651.43", "monthly_services": "84612.93"},
+        {"letter": "E", "annual_cap": "36028231.33", "monthly_services": "119811.45"},
+        {"letter": "F", "annual_cap": "45151659.41", "monthly_services": "150784.21"},
+        {"letter": "G", "annual_cap": "53995798.87", "monthly_services": "230312.94"},
+        {"letter": "H", "annual_cap": "81924660.37", "monthly_services": "522706.68"},
+        {"letter": "I", "annual_cap": "91699761.90", "monthly_services": "963747.86"},
+        {"letter": "J", "annual_cap": "105012519.20", "monthly_services": "1167299.76"},
+        {"letter": "K", "annual_cap": "126610838.75", "monthly_services": "1614446.04"}
+      ]
+    }
+  ]
+}

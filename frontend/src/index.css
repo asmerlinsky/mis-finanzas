@@ -387,3 +387,7 @@ table.targets {
 .small {
   font-size: 0.8rem;
 }
+
+a {
+  color: var(--accent);
+}

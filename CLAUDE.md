@@ -8,10 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - a ledger of earnings and expenses;
 - statement imports from the owner's bank, wallet and broker;
 - every total shown in ARS and in USD at the daily MEP rate;
-- broker investments: Balanz statements, valued daily with public market prices.
+- broker investments: Balanz statements, valued daily with public market prices;
+- monotributo: invoices from ARCA's "Mis Comprobantes" export, with their PDFs, against the
+  category caps.
 
-Not built yet: monotributo tracking from ARCA's "Mis Comprobantes" export. The design and its
-decisions are in `docs/specs/2026-10-27-mis-finanzas-design.md`. Read it before starting a new slice. The UI and
+The design and its decisions are in `docs/specs/2026-10-27-mis-finanzas-design.md`, and the
+slices after it in `docs/plans/2026-10-27-remaining-slices.md`. Read it before starting a new slice. The UI and
 the domain terms are in Spanish.
 
 **Hard constraint:** personal data is processed and stored only locally. No request may carry
@@ -44,7 +46,8 @@ Node comes from `n` (`/usr/local/bin/node`, v22). The apt `/usr/bin/node` v12 is
 ## Architecture
 
 The backend is `backend/src/mis_finanzas/`: FastAPI + SQLAlchemy 2.1 + SQLite, Python 3.12, uv.
-Dependencies point one way: `api → importers/reports → investments → ledger/market → core`.
+Dependencies point one way:
+`api → importers/reports → investments/monotributo → ledger/market → core`.
 - `core/`: settings (`MIS_FINANZAS_*` env vars), engine/session, money helpers, logging, and
   the Alembic runner.
 - `ledger/`: models and the pure bookkeeping logic:
@@ -69,6 +72,9 @@ Dependencies point one way: `api → importers/reports → investments → ledge
 - `investments/`: instruments, operations and holdings snapshots from broker statements.
   Parsers emit its plain records (`records.py`); `store.py` writes them in the import's
   transaction. Broker cash is ledger rows on the broker's accounts, not here.
+- `monotributo/`: issued invoices (upserted by type, point of sale and number), the owner's
+  category, ARCA's category tables (`categories.json`, edited by hand twice a year) and the
+  status math (`status.py`, pure). It imports `core` only.
 - `market/`: the FX rate and price source adapters (ArgentinaDatos MEP, data912 panels), the
   daily refresh and the date → rate lookup.
 - `reports/`: monthly and per-category totals in both currencies.

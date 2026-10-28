@@ -10,6 +10,7 @@ from mis_finanzas.api.schemas import (
     CheckOut,
     ImportBatchOut,
     InvestmentSummaryOut,
+    InvoiceSummaryOut,
     MappingIn,
     MappingOut,
     PreviewOut,
@@ -30,6 +31,7 @@ from mis_finanzas.importers.service import (
 )
 from mis_finanzas.investments.store import InvestmentSummary
 from mis_finanzas.ledger.models import Account, ImportBatch
+from mis_finanzas.monotributo.store import InvoiceSummary
 
 router = APIRouter(tags=["imports"])
 
@@ -123,6 +125,18 @@ def _preview_out(preview: ImportPreview) -> PreviewOut:
         rows=rows,
         errors=[RowErrorOut(line_number=e.line_number, message=e.message) for e in preview.errors],
         investments=_investments_out(preview.investments),
+        invoices=_invoices_out(preview.invoices),
+    )
+
+
+def _invoices_out(summary: InvoiceSummary | None) -> InvoiceSummaryOut | None:
+    if summary is None:
+        return None
+    return InvoiceSummaryOut(
+        invoices=summary.invoices,
+        new=summary.new,
+        changed=summary.changed,
+        pdf_for=summary.pdf_for,
     )
 
 

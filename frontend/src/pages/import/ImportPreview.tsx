@@ -3,7 +3,15 @@
 
 import { useState } from 'react'
 
-import type { Account, Currency, InvestmentSummary, Preview, PreviewRow, StatementCheck } from '../../api/types'
+import type {
+  Account,
+  Currency,
+  InvestmentSummary,
+  InvoiceSummary,
+  Preview,
+  PreviewRow,
+  StatementCheck,
+} from '../../api/types'
 import { Money } from '../../components/ui'
 import { formatDate, KIND_LABELS } from '../../lib/format'
 import { blockers, DEFAULT_TARGET, importerLabel, suggestedAccount, targetCurrency } from '../../lib/importers'
@@ -108,6 +116,36 @@ function Investments({ summary }: { summary: InvestmentSummary | null }) {
   )
 }
 
+/** ARCA files: how many invoices are new or changed, or which invoice a PDF belongs to. */
+function Invoices({ summary }: { summary: InvoiceSummary | null }) {
+  if (!summary) return null
+  if (summary.pdf_for) {
+    return (
+      <p>
+        PDF de <strong>{summary.pdf_for}</strong>: se adjunta a ese comprobante.
+      </p>
+    )
+  }
+  const unchanged = summary.invoices - summary.new - summary.changed.length
+  return (
+    <p>
+      <strong>{summary.invoices}</strong> comprobantes: {summary.new} nuevos,{' '}
+      {summary.changed.length} con cambios, {unchanged} sin cambios.
+      {summary.changed.length > 0 && (
+        <span className="muted"> Cambian: {summary.changed.join(', ')}.</span>
+      )}
+    </p>
+  )
+}
+
+function commitLabel(preview: Preview, importable: number): string {
+  if (preview.rows.length > 0 || (!preview.investments && !preview.invoices)) {
+    return `Importar ${importable} movimientos`
+  }
+  if (preview.invoices?.pdf_for) return 'Adjuntar PDF'
+  return preview.invoices ? 'Importar comprobantes' : 'Importar tenencias'
+}
+
 function rowCurrency(row: PreviewRow, accounts: Account[]): Currency {
   return accounts.find((a) => a.id === row.account_id)?.currency ?? targetCurrency(row.target)
 }
@@ -209,6 +247,7 @@ export function ImportPreview({ preview, accounts, busy, onMap, onCreate, onComm
       <Checks checks={preview.checks} />
       <Targets preview={preview} accounts={accounts} onMap={onMap} onCreate={onCreate} />
       <Investments summary={preview.investments} />
+      <Invoices summary={preview.invoices} />
       {preview.rows.length > 0 && (
         <p>
           <strong>{preview.new_count}</strong> movimientos nuevos, {preview.duplicate_count} ya
@@ -236,7 +275,7 @@ export function ImportPreview({ preview, accounts, busy, onMap, onCreate, onComm
         disabled={reasons.length > 0 || busy}
         onClick={() => onCommit({ skipLines: [...skipped], skipInvalid })}
       >
-        {preview.rows.length === 0 && preview.investments ? 'Importar tenencias' : `Importar ${importable} movimientos`}
+        {commitLabel(preview, importable)}
       </button>
       {preview.rows.length > 0 && (
         <Rows preview={preview} accounts={accounts} skipped={skipped} toggle={toggle} />
